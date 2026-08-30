@@ -6,7 +6,7 @@ import { TuyaClient } from '../../src/tuya/client';
 jest.mock('../../src/lg/client');
 jest.mock('../../src/tuya/client');
 
-describe('AutomationEngine — Core Logic & 3-Minute Shutdown Delay', () => {
+describe('AutomationEngine — Core Logic & 1m 30s Shutdown Delay', () => {
   let mockLgClient: jest.Mocked<LgThinQClient>;
   let mockTuyaClient: jest.Mocked<TuyaClient>;
   let engine: AutomationEngine;
@@ -85,7 +85,7 @@ describe('AutomationEngine — Core Logic & 3-Minute Shutdown Delay', () => {
     expect(mockTuyaClient.setPlugState).not.toHaveBeenCalled();
   });
 
-  it('should WAIT 3-minute delay when cooking stops (keeping hood ON)', async () => {
+  it('should WAIT 1m 30s shutdown delay when cooking stops (keeping hood ON)', async () => {
     // 1st run: Cooktop active at T = 0
     mockLgClient.getCooktopStatus.mockResolvedValueOnce({
       deviceId: 'lg_cooktop',
@@ -106,8 +106,8 @@ describe('AutomationEngine — Core Logic & 3-Minute Shutdown Delay', () => {
     });
     await engine.evaluateAndExecute(baseTime);
 
-    // 2nd run: 1 minute later (T = +60s < 180s), cooktop turned OFF
-    const tPlus1Min = baseTime + 60 * 1000;
+    // 2nd run: 30 seconds later (T = +30s < 90s), cooktop turned OFF
+    const tPlus30s = baseTime + 30 * 1000;
     mockLgClient.getCooktopStatus.mockResolvedValueOnce({
       deviceId: 'lg_cooktop',
       deviceName: 'LG Induction',
@@ -126,16 +126,16 @@ describe('AutomationEngine — Core Logic & 3-Minute Shutdown Delay', () => {
       fault: null,
     });
 
-    const result2 = await engine.evaluateAndExecute(tPlus1Min);
+    const result2 = await engine.evaluateAndExecute(tPlus30s);
 
     expect(result2.action).toBe('WAITING_SHUTDOWN_DELAY');
     expect(result2.inductionState).toBe('OFF');
     expect(result2.hoodState).toBe('ON');
-    expect(result2.remainingDelaySeconds).toBe(120); // 180s - 60s = 120s
+    expect(result2.remainingDelaySeconds).toBe(60); // 90s - 30s = 60s
     expect(mockTuyaClient.setPlugState).not.toHaveBeenCalled();
   });
 
-  it('should turn hood OFF after 3 minutes have elapsed since cooking stopped', async () => {
+  it('should turn hood OFF after 1m 30s have elapsed since cooking stopped', async () => {
     // 1st run: Cooktop active at T = 0
     mockLgClient.getCooktopStatus.mockResolvedValueOnce({
       deviceId: 'lg_cooktop',
@@ -156,8 +156,8 @@ describe('AutomationEngine — Core Logic & 3-Minute Shutdown Delay', () => {
     });
     await engine.evaluateAndExecute(baseTime);
 
-    // 2nd run: 3.5 minutes later (T = +210s >= 180s), cooktop OFF
-    const tPlus3Min30s = baseTime + 210 * 1000;
+    // 2nd run: 1m 40s later (T = +100s >= 90s), cooktop OFF
+    const tPlus100s = baseTime + 100 * 1000;
     mockLgClient.getCooktopStatus.mockResolvedValueOnce({
       deviceId: 'lg_cooktop',
       deviceName: 'LG Induction',
@@ -182,7 +182,7 @@ describe('AutomationEngine — Core Logic & 3-Minute Shutdown Delay', () => {
       message: 'Plug turned OFF',
     });
 
-    const result2 = await engine.evaluateAndExecute(tPlus3Min30s);
+    const result2 = await engine.evaluateAndExecute(tPlus100s);
 
     expect(result2.action).toBe('TURN_OFF');
     expect(result2.inductionState).toBe('OFF');

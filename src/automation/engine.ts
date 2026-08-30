@@ -7,7 +7,8 @@ import {
   StructuredLogEvent,
 } from './types';
 
-export const SHUTDOWN_DELAY_MS = 3 * 60 * 1000; // 3 minutes = 180,000 ms
+// Default shutdown delay: 1 minute 30 seconds (90,000 ms), configurable via process.env.SHUTDOWN_DELAY_SECONDS
+export const SHUTDOWN_DELAY_MS = Number(process.env.SHUTDOWN_DELAY_SECONDS || 90) * 1000;
 
 export class AutomationEngine {
   private lgClient: LgThinQClient;
@@ -109,7 +110,7 @@ export class AutomationEngine {
         changed = false;
 
         const secondsSinceOff = Math.round(timeSinceActive / 1000);
-        message = `Induction stopped ${secondsSinceOff}s ago. Waiting 3-minute shutdown delay (${remainingDelaySeconds}s remaining) before turning hood OFF.`;
+        message = `Induction stopped ${secondsSinceOff}s ago. Waiting 1m 30s shutdown delay (${remainingDelaySeconds}s remaining) before turning hood OFF.`;
       } else {
         // Delay elapsed (or no active history) -> Hood MUST be OFF
         AutomationStateStore.saveState({
@@ -120,13 +121,13 @@ export class AutomationEngine {
         if (!plugIsOn) {
           action = 'ALREADY_OFF';
           changed = false;
-          message = 'Induction inactive for >= 3 minutes. Hood plug is already OFF.';
+          message = 'Induction inactive for >= 1m 30s. Hood plug is already OFF.';
         } else {
           const controlRes = await this.tuyaClient.setPlugState(false);
           action = 'TURN_OFF';
           changed = controlRes.changed;
           finalHoodState = 'OFF';
-          message = 'Induction inactive for >= 3 minutes. Turned kitchen hood plug OFF.';
+          message = 'Induction inactive for >= 1m 30s. Turned kitchen hood plug OFF.';
         }
       }
     }

@@ -3,7 +3,7 @@ import { AutomationEngine } from '../../src/automation/engine';
 
 jest.mock('../../src/automation/engine');
 
-describe('Scheduled Automation Function', () => {
+describe('Scheduled Automation Function (Option A — 1 Minute)', () => {
   let mockEvaluate: jest.Mock;
 
   beforeEach(() => {
@@ -14,7 +14,7 @@ describe('Scheduled Automation Function', () => {
     }));
   });
 
-  it('should execute evaluation and return 200 OK', async () => {
+  it('should execute evaluation once and return 200 OK', async () => {
     mockEvaluate.mockResolvedValueOnce({
       action: 'TURN_ON',
       inductionState: 'ON',
@@ -22,7 +22,7 @@ describe('Scheduled Automation Function', () => {
       changed: true,
       remainingDelaySeconds: 0,
       message: 'Induction active. Hood turned ON.',
-      evaluatedAt: '2026-08-30T22:22:20.000Z',
+      evaluatedAt: '2026-08-30T22:58:00.000Z',
     });
 
     const response = await rawHandler();
@@ -31,7 +31,7 @@ describe('Scheduled Automation Function', () => {
     const body = JSON.parse(response.body);
     expect(body.ok).toBe(true);
     expect(body.data.action).toBe('TURN_ON');
-    expect(mockEvaluate).toHaveBeenCalled();
+    expect(mockEvaluate).toHaveBeenCalledTimes(1);
   });
 
   it('should catch engine error and return 500 status', async () => {
