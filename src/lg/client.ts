@@ -123,12 +123,12 @@ export class LgThinQClient {
       if (deviceId && deviceId !== 'your_lg_cooktop_device_id_here') {
         try {
           const res1 = await this.axiosInstance.get(`/devices/${deviceId}`);
-          data = res1.data?.result || res1.data?.response || res1.data;
+          data = res1.data?.response || res1.data?.result || res1.data;
         } catch (err1: any) {
           if (err1.response?.status === 404) {
             try {
               const res2 = await this.axiosInstance.get(`/devices/${deviceId}/status`);
-              data = res2.data?.result || res2.data?.response || res2.data;
+              data = res2.data?.response || res2.data?.result || res2.data;
             } catch (err2: any) {
               // Ignore and fall through to getDevices fallback
             }
@@ -138,7 +138,6 @@ export class LgThinQClient {
         }
       }
 
-      // Fallback: Query device list if individual status returned 404 or deviceId was not set
       if (!data) {
         const devices = await this.getDevices();
         const found =
@@ -168,32 +167,60 @@ export class LgThinQClient {
   }
 
   public parseCooktopStatus(deviceId: string, rawData: any): LgStatusResponse {
-    const info = rawData.deviceInfo || {};
-    const deviceName = info.alias || rawData.alias || rawData.deviceName || 'LG Cooktop BEF3AMB4E';
+    const root = rawData.response || rawData.result || rawData;
+    const info = root.deviceInfo || rawData.deviceInfo || {};
+
+    const deviceName = info.alias || rawData.alias || rawData.deviceName || '전기레인지';
     const modelName = info.modelName || rawData.modelName || rawData.model || 'BEF3AMB4E';
     const online = rawData.online ?? info.online ?? true;
-
-    const stateObj = rawData.state || rawData.status || rawData;
 
     const burners: BurnerState[] = [];
     let isOperating = false;
     let powerState: 'ON' | 'OFF' | 'UNKNOWN' = 'OFF';
 
-    if (typeof stateObj === 'object' && stateObj !== null) {
-      const topState = String(
-        stateObj.operationState || stateObj.cooktopState || stateObj.powerState || stateObj.operation || ''
-      ).toUpperCase();
+    // Check operationState from LG ThinQ API
+    const opState = String(
+      root.operation?.operationState ||
+      root.operationState ||
+      root.cooktopState ||
+      root.powerState ||
+      root.operation ||
+      ''
+    ).toUpperCase();
 
-      if (['RUNNING', 'COOKING', 'ON', 'WORKING'].includes(topState)) {
-        isOperating = true;
-        powerState = 'ON';
+    if (['RUNNING', 'COOKING', 'POWER_ON', 'ON', 'WORKING', 'COOK'].includes(opState)) {
+      isOperating = true;
+      powerState = 'ON';
+    }
+
+    // Check official LG ThinQ cookingZone array
+    const cookingZone = Array.isArray(root.cookingZone) ? root.cookingZone : [];
+    if (cookingZone.length > 0) {
+      for (const zone of cookingZone) {
+        const locationName = zone.location?.locationName || zone.burnerId || 'BURNER';
+        const zoneState = String(zone.cookingZone?.currentState || '').toUpperCase();
+        const level = Number(zone.power?.powerLevel || zone.powerLevel || 0);
+
+        const active = zoneState === 'COOK' || level > 0;
+        burners.push({
+          burnerId: locationName,
+          isOperating: active,
+          powerLevel: level,
+        });
+
+        if (active) {
+          isOperating = true;
+          powerState = 'ON';
+        }
       }
+    } else {
+      // Fallback for flat state objects
+      const stateObj = root.state || root.status || root;
+      if (typeof stateObj === 'object' && stateObj !== null) {
+        const burnerKeys = Object.keys(stateObj).filter((k) =>
+          /burner|element|flex|left|right|center/i.test(k)
+        );
 
-      const burnerKeys = Object.keys(stateObj).filter((k) =>
-        /burner|element|flex|left|right|center/i.test(k)
-      );
-
-      if (burnerKeys.length > 0) {
         for (const key of burnerKeys) {
           const val = stateObj[key];
           let level = 0;
@@ -205,9 +232,6 @@ export class LgThinQClient {
           } else if (typeof val === 'object' && val !== null) {
             level = Number(val.powerLevel || val.level || val.power || 0);
             active = val.state === 'ON' || val.isOperating || level > 0;
-          } else if (typeof val === 'string') {
-            active = val.toUpperCase() === 'ON' || val.toUpperCase() === 'COOKING';
-            level = active ? 1 : 0;
           }
 
           burners.push({
@@ -221,17 +245,6 @@ export class LgThinQClient {
             powerState = 'ON';
           }
         }
-      } else {
-        const powerLevel = Number(stateObj.powerLevel || stateObj.totalPowerLevel || 0);
-        if (powerLevel > 0) {
-          isOperating = true;
-          powerState = 'ON';
-          burners.push({
-            burnerId: 'main_cooktop',
-            isOperating: true,
-            powerLevel,
-          });
-        }
       }
     }
 
@@ -243,7 +256,7 @@ export class LgThinQClient {
       isOperating,
       powerState,
       burners,
-      rawState: stateObj,
+      rawState: root,
     };
   }
 }
