@@ -122,18 +122,18 @@ export class LgThinQClient {
 
       if (deviceId && deviceId !== 'your_lg_cooktop_device_id_here') {
         try {
-          const res1 = await this.axiosInstance.get(`/devices/${deviceId}`);
-          data = res1.data?.response || res1.data?.result || res1.data;
-        } catch (err1: any) {
-          if (err1.response?.status === 404) {
+          const resState = await this.axiosInstance.get(`/devices/${deviceId}/state`);
+          data = resState.data;
+        } catch (errState: any) {
+          if (errState.response?.status === 404) {
             try {
-              const res2 = await this.axiosInstance.get(`/devices/${deviceId}/status`);
-              data = res2.data?.response || res2.data?.result || res2.data;
-            } catch (err2: any) {
-              // Ignore and fall through to getDevices fallback
+              const resProfile = await this.axiosInstance.get(`/devices/${deviceId}`);
+              data = resProfile.data;
+            } catch {
+              // Fall through
             }
           } else {
-            throw err1;
+            throw errState;
           }
         }
       }
@@ -178,27 +178,18 @@ export class LgThinQClient {
     let isOperating = false;
     let powerState: 'ON' | 'OFF' | 'UNKNOWN' = 'OFF';
 
-    // Check operationState from LG ThinQ API
-    const opState = String(
-      root.operation?.operationState ||
-      root.operationState ||
-      root.cooktopState ||
-      root.powerState ||
-      root.operation ||
-      ''
-    ).toUpperCase();
+    const items = Array.isArray(root)
+      ? root
+      : Array.isArray(root.cookingZone)
+      ? root.cookingZone
+      : [];
 
-    if (['RUNNING', 'COOKING', 'POWER_ON', 'ON', 'WORKING', 'COOK'].includes(opState)) {
-      isOperating = true;
-      powerState = 'ON';
-    }
-
-    // Check official LG ThinQ cookingZone array
-    const cookingZone = Array.isArray(root.cookingZone) ? root.cookingZone : [];
-    if (cookingZone.length > 0) {
-      for (const zone of cookingZone) {
+    if (items.length > 0) {
+      for (const zone of items) {
         const locationName = zone.location?.locationName || zone.burnerId || 'BURNER';
-        const zoneState = String(zone.cookingZone?.currentState || '').toUpperCase();
+        const zoneState = String(
+          zone.cookingZone?.currentState || zone.currentState || ''
+        ).toUpperCase();
         const level = Number(zone.power?.powerLevel || zone.powerLevel || 0);
 
         const active = zoneState === 'COOK' || level > 0;
@@ -214,7 +205,6 @@ export class LgThinQClient {
         }
       }
     } else {
-      // Fallback for flat state objects
       const stateObj = root.state || root.status || root;
       if (typeof stateObj === 'object' && stateObj !== null) {
         const burnerKeys = Object.keys(stateObj).filter((k) =>
@@ -246,6 +236,20 @@ export class LgThinQClient {
           }
         }
       }
+    }
+
+    const opState = String(
+      root.operation?.operationState ||
+      root.operationState ||
+      root.cooktopState ||
+      root.powerState ||
+      root.operation ||
+      ''
+    ).toUpperCase();
+
+    if (['RUNNING', 'COOKING', 'POWER_ON', 'ON', 'WORKING', 'COOK'].includes(opState)) {
+      isOperating = true;
+      powerState = 'ON';
     }
 
     return {
