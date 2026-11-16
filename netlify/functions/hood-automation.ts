@@ -1,43 +1,17 @@
-import type { Handler, HandlerResponse } from '@netlify/functions';
+import type {Handler} from '@netlify/functions';
 import { AutomationEngine } from '../../src/automation/engine';
 
-const headers: Record<string, string> = {
-  'Content-Type': 'application/json',
-  'Cache-Control': 'no-cache, no-store, must-revalidate',
-};
-
-export const handler: Handler = async (event): Promise<HandlerResponse> => {
-  if (event.httpMethod !== 'GET') {
-    return {
-      statusCode: 405,
-      headers,
-      body: JSON.stringify({ error: 'Method Not Allowed' }),
-    };
-  }
-
+export const handler: Handler = async event => {
+  if (event.httpMethod !== 'POST') return {statusCode: 405, body: 'Method Not Allowed'};
+  if (process.env.AUTOMATION_ENABLED !== 'true' || process.env.MANUAL_AUTOMATION_ENABLED !== 'true')
+    return {statusCode: 403, body: 'Automation disabled'};
+  const token = process.env.AUTOMATION_ADMIN_TOKEN;
+  if (!token || event.headers['x-automation-token'] !== token)
+    return {statusCode: 401, body: 'Unauthorized'};
   try {
-    const engine = new AutomationEngine();
-    const result = await engine.evaluateAndExecute();
-
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        ok: true,
-        data: result,
-      }),
-    };
-  } catch (err: any) {
-    console.error('[Hood Automation Error]', err.message);
-
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({
-        ok: false,
-        error: 'Failed to execute hood automation engine',
-        message: err.message,
-      }),
-    };
+    const result = await new AutomationEngine().evaluateAndExecute();
+    return {statusCode: 200, body: JSON.stringify({ok: true, data: result})};
+  } catch {
+    return {statusCode: 500, body: JSON.stringify({ok: false, error: 'Automation failed'})};
   }
 };

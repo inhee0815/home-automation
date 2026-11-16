@@ -1,66 +1,22 @@
-import type { Handler, HandlerResponse } from '@netlify/functions';
-import { TuyaClient } from '../../src/tuya/client';
-import { TuyaControlRequest } from '../../src/tuya/types';
+import type {Handler} from '@netlify/functions';
+import { sendDirectPlugCommand } from '../../src/tuya/directCommand';
 
-const headers: Record<string, string> = {
-  'Content-Type': 'application/json',
-  'Cache-Control': 'no-cache, no-store, must-revalidate',
-};
-
-export const handler: Handler = async (event): Promise<HandlerResponse> => {
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers,
-      body: JSON.stringify({ error: 'Method Not Allowed' }),
-    };
-  }
-
-  let body: TuyaControlRequest;
+export const handler: Handler = async event => {
+  if (event.httpMethod !== 'POST') return {statusCode: 405, body: 'Method Not Allowed'};
+  if (process.env.TUYA_COMMANDS_ENABLED !== 'true' || process.env.MANUAL_AUTOMATION_ENABLED !== 'true')
+    return {statusCode: 403, body: 'Manual control disabled'};
+  const token = process.env.AUTOMATION_ADMIN_TOKEN;
+  if (!token || event.headers['x-automation-token'] !== token)
+    return {statusCode: 401, body: 'Unauthorized'};
+  let body: unknown;
+  try { body = JSON.parse(event.body || '{}'); }
+  catch { return {statusCode: 400, body: 'Invalid JSON'}; }
+  if (!body || typeof body !== 'object' || typeof (body as {on?: unknown}).on !== 'boolean')
+    return {statusCode: 400, body: 'Expected {"on":boolean}'};
   try {
-    body = JSON.parse(event.body || '{}');
+    await sendDirectPlugCommand((body as {on: boolean}).on);
+    return {statusCode: 200, body: JSON.stringify({ok: true, status: 'command_accepted_not_verified'})};
   } catch {
-    return {
-      statusCode: 400,
-      headers,
-      body: JSON.stringify({ error: 'Invalid JSON request body' }),
-    };
-  }
-
-  if (typeof body.on !== 'boolean') {
-    return {
-      statusCode: 400,
-      headers,
-      body: JSON.stringify({
-        error: 'Validation Error',
-        message: 'The "on" property must be a boolean (true or false).',
-      }),
-    };
-  }
-
-  try {
-    const tuyaClient = new TuyaClient();
-    const result = await tuyaClient.setPlugState(body.on);
-
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        ok: true,
-        data: result,
-      }),
-    };
-  } catch (err: any) {
-    console.error('[Tuya Control Error]', err.message);
-
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({
-        ok: false,
-        error: 'Failed to execute Tuya device control',
-        message: err.message,
-      }),
-    };
+    return {statusCode: 502, body: JSON.stringify({ok: false, error: 'Tuya command failed'})};
   }
 };

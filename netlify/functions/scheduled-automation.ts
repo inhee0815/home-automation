@@ -2,26 +2,16 @@ import { schedule } from '@netlify/functions';
 import { AutomationEngine } from '../../src/automation/engine';
 
 export const rawHandler = async () => {
-  console.log('[Scheduled Hood Automation Triggered]');
+  if (process.env.AUTOMATION_ENABLED !== 'true') {
+    return {statusCode: 200, body: JSON.stringify({ok: true, skipped: true, reason: 'AUTOMATION_ENABLED is not true'})};
+  }
   try {
-    const engine = new AutomationEngine();
-    const result = await engine.evaluateAndExecute();
-    console.log('[Scheduled Hood Automation Completed]', JSON.stringify(result));
-
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: true, data: result }),
-    };
-  } catch (err: any) {
-    console.error('[Scheduled Hood Automation Error]', err.message);
-
-    return {
-      statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: false, error: err.message }),
-    };
+    const result = await new AutomationEngine().evaluateAndExecute();
+    console.log(JSON.stringify({event: 'hood_automation', ...result}));
+    return {statusCode: 200, body: JSON.stringify({ok: true, data: result})};
+  } catch {
+    console.error('Scheduled hood automation failed');
+    return {statusCode: 500, body: JSON.stringify({ok: false, error: 'Automation failed'})};
   }
 };
-
 export const handler = schedule('* * * * *', rawHandler);
