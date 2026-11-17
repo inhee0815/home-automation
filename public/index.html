@@ -49,7 +49,7 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
  const $=id=>document.getElementById(id);
  let key='';
  const set=(id,value)=>{$(id).textContent=String(value??'—')};
- const date=value=>{if(!value)return '—';const d=new Date(value);return Number.isNaN(d.getTime())?'—':d.toLocaleString('ko-KR')};
+ const date=value=>{if(!value)return '—';const d=new Date(typeof value==='number'?value:value);return Number.isNaN(d.getTime())?'—':d.toLocaleString('ko-KR')};
  const empty=(el,span)=>{el.replaceChildren();const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=span;td.textContent='기록 없음';tr.append(td);el.append(tr)};
  const rows=(id,items,keys)=>{const root=$(id);root.replaceChildren();if(!items.length){empty(root,keys.length);return}
    for(const item of items){const tr=document.createElement('tr');for(const fn of keys){const td=document.createElement('td');td.textContent=String(fn(item)??'—');tr.append(td)}root.append(tr)}};
