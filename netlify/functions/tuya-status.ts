@@ -2,7 +2,7 @@ import { connectLambda } from '@netlify/blobs';
 import type { Handler, HandlerResponse } from '@netlify/functions';
 import { TuyaClient } from '../../src/tuya/client';
 import crypto from 'crypto';
-import { runtimeEnabled } from '../../src/automation/runtimeSwitch';
+import { manualLiveTestEnabled } from '../../src/automation/runtimeSwitch';
 
 const headers: Record<string, string> = {
   'Content-Type': 'application/json',
@@ -25,7 +25,8 @@ export const handler: Handler = async (event): Promise<HandlerResponse> => {
     crypto.createHash('sha256').update(expected).digest()
   )) return {statusCode:401,headers,body:JSON.stringify({error:'Unauthorized'})};
 
-  if (!(await runtimeEnabled())) return {statusCode:403,headers,body:JSON.stringify({error:'Automation is paused; no Tuya API quota will be spent'})};
+  if (!manualLiveTestEnabled()) return {statusCode:403,headers,body:JSON.stringify({error:'Manual live test is disabled'})};
+  connectLambda(event as unknown as Parameters<typeof connectLambda>[0]);
   try {
     const tuyaClient = new TuyaClient();
     const status = await tuyaClient.getStatus();
