@@ -1,5 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import crypto from 'crypto';
+import { connectLambda } from '@netlify/blobs';
 import { mayArmFromDashboard, armingBlockers, runtimeEnabled, setRuntimeSwitch } from '../../src/automation/runtimeSwitch';
 
 const headers = {'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
@@ -12,6 +13,7 @@ function authorized(token?: string) {
   );
 }
 export const handler: Handler = async event => {
+  connectLambda(event);
   if (event.httpMethod !== 'POST') return {statusCode:405,headers,body:JSON.stringify({error:'Method Not Allowed'})};
   if (!authorized(event.headers['x-automation-token'])) return {statusCode:401,headers,body:JSON.stringify({error:'Unauthorized'})};
   let data: unknown;

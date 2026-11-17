@@ -5,6 +5,12 @@ import { getStore } from '@netlify/blobs';
  * This is not a distributed lock and does not prevent an already-in-flight command.
  */
 export interface RuntimeSwitch { enabled: boolean; updatedAt: string }
+function logBlobFailure(operation: string, error: unknown): void {
+  const name = error instanceof Error ? error.name : 'UnknownError';
+  // Do not log provider messages or tokens; error class is sufficient to diagnose setup.
+  console.error(JSON.stringify({event:'netlify_blobs_error',operation,errorType:name}));
+}
+
 const store = () => getStore({
   name: process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod',
   consistency: 'strong',
@@ -43,8 +49,8 @@ export async function runtimeEnabled(): Promise<boolean> {
   try {
     const state = await store().get('control/runtime-switch', {type:'json',consistency:'strong'}) as RuntimeSwitch | null;
     return state?.enabled === true;
-  } catch {
-    console.error(JSON.stringify({event:'runtime_switch_read_failed'}));
+  } catch (error) {
+    logBlobFailure('runtime_switch_read',error);
     return false;
   }
 }

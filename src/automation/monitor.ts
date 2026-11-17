@@ -25,7 +25,7 @@ export async function recordRun(outcome: MonitorOutcome, result?: AutomationResu
     if (outcome !== 'OK' || now.getUTCMinutes()%15 === 0) {
       await s.setJSON('monitor/runs/'+now.toISOString()+'-'+Math.random().toString(36).slice(2,8),entry);
     }
-  } catch {
-    console.error('Monitoring state write failed');
+  } catch (error) {
+    console.error(JSON.stringify({event:'netlify_blobs_error',operation:'monitoring_write',errorType:error instanceof Error ? error.name : 'UnknownError'}));
   }
 }
