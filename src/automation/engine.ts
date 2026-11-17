@@ -44,12 +44,18 @@ export class AutomationEngine {
         induction, desired: 'UNKNOWN', confirmed: 'UNKNOWN',
         offDetectedAt: induction === 'OFF' ? now : null,
         lastCommandAt: null, lastVerifiedAt: null, failureCount: 0, nextRetryAt: 0, updatedAt: now,
+        onDetectedAt: induction === 'ON' ? now : null, onCommandAcceptedAt: null, onPlugConfirmedAt: null,
       };
       await this.store.save(initial);
       return result('WAITING_SHUTDOWN_DELAY', induction, 'UNKNOWN', 'Initialized persistent state; no device command.');
     }
 
     const next: HoodState = { ...state, induction, updatedAt: now };
+    if (induction === 'ON' && (state.induction !== 'ON' || !state.onDetectedAt)) {
+      next.onDetectedAt = now;
+      next.onCommandAcceptedAt = null;
+      next.onPlugConfirmedAt = null;
+    }
     next.offDetectedAt = induction === 'OFF' ? (state.induction === 'OFF' ? state.offDetectedAt ?? now : now) : null;
     const remaining = induction === 'OFF' ? Math.max(0, next.offDetectedAt! + SHUTDOWN_DELAY_MS - now) : 0;
     const target: Power | null = induction === 'ON' ? 'ON' : remaining === 0 ? 'OFF' : null;
@@ -69,6 +75,7 @@ export class AutomationEngine {
         next.confirmed = observed.switch_1 ? 'ON' : 'OFF';
         next.lastVerifiedAt = now;
         if (next.confirmed === target) {
+          if (target === 'ON') next.onPlugConfirmedAt = Date.now();
           next.failureCount = 0;
           next.nextRetryAt = 0;
           await this.store.save(next);
@@ -175,6 +182,7 @@ export class AutomationEngine {
       await sendDirectPlugCommand(target === 'ON');
       next.confirmed = 'UNKNOWN'; // Accepted != physically confirmed.
       next.lastCommandAt = now;
+      if (target === 'ON') next.onCommandAcceptedAt = Date.now();
       next.lastVerifiedAt = null;
       next.failureCount = 0;
       next.nextRetryAt = now + 60_000;
