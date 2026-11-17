@@ -1,222 +1,71 @@
-import { AutomationEngine, SHUTDOWN_DELAY_MS } from '../../src/automation/engine';
-import { AutomationStateStore } from '../../src/automation/stateStore';
-import { LgThinQClient } from '../../src/lg/client';
-import { TuyaClient } from '../../src/tuya/client';
+import { AutomationEngine } from '../../src/automation/engine';
+import { sendDirectPlugCommand } from '../../src/tuya/directCommand';
+import { HoodState } from '../../src/automation/stateStore';
 
-jest.mock('../../src/lg/client');
-jest.mock('../../src/tuya/client');
-
-describe('AutomationEngine — Core Logic & 1m 30s Shutdown Delay', () => {
-  let mockLgClient: jest.Mocked<LgThinQClient>;
-  let mockTuyaClient: jest.Mocked<TuyaClient>;
-  let engine: AutomationEngine;
-
-  const baseTime = 1700000000000;
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    AutomationStateStore.resetState();
-
-    mockLgClient = new LgThinQClient() as jest.Mocked<LgThinQClient>;
-    mockTuyaClient = new TuyaClient() as jest.Mocked<TuyaClient>;
-    engine = new AutomationEngine(mockLgClient, mockTuyaClient);
-  });
-
-  it('should turn hood ON when induction becomes active (plug currently OFF)', async () => {
-    mockLgClient.getCooktopStatus.mockResolvedValueOnce({
-      deviceId: 'lg_cooktop',
-      deviceName: 'LG Induction',
-      modelName: 'BEF3AMB4E',
-      online: true,
-      isOperating: true,
-      powerState: 'ON',
-      burners: [{ burnerId: 'b1', isOperating: true, powerLevel: 7 }],
-    });
-
-    mockTuyaClient.getStatus.mockResolvedValueOnce({
-      online: true,
-      switch_1: false,
-      cur_power: 0,
-      cur_current: 0,
-      cur_voltage: 220,
-      fault: null,
-    });
-
-    mockTuyaClient.setPlugState.mockResolvedValueOnce({
-      success: true,
-      changed: true,
-      currentState: true,
-      message: 'Plug turned ON',
-    });
-
-    const result = await engine.evaluateAndExecute(baseTime);
-
-    expect(result.action).toBe('TURN_ON');
-    expect(result.inductionState).toBe('ON');
-    expect(result.hoodState).toBe('ON');
-    expect(result.changed).toBe(true);
-    expect(mockTuyaClient.setPlugState).toHaveBeenCalledWith(true);
-  });
-
-  it('should return ALREADY_ON when induction is active and plug is already ON', async () => {
-    mockLgClient.getCooktopStatus.mockResolvedValueOnce({
-      deviceId: 'lg_cooktop',
-      deviceName: 'LG Induction',
-      modelName: 'BEF3AMB4E',
-      online: true,
-      isOperating: true,
-      powerState: 'ON',
-      burners: [{ burnerId: 'b1', isOperating: true, powerLevel: 5 }],
-    });
-
-    mockTuyaClient.getStatus.mockResolvedValueOnce({
-      online: true,
-      switch_1: true,
-      cur_power: 120,
-      cur_current: 500,
-      cur_voltage: 220,
-      fault: null,
-    });
-
-    const result = await engine.evaluateAndExecute(baseTime);
-
-    expect(result.action).toBe('ALREADY_ON');
-    expect(result.changed).toBe(false);
-    expect(mockTuyaClient.setPlugState).not.toHaveBeenCalled();
-  });
-
-  it('should WAIT 1m 30s shutdown delay when cooking stops (keeping hood ON)', async () => {
-    // 1st run: Cooktop active at T = 0
-    mockLgClient.getCooktopStatus.mockResolvedValueOnce({
-      deviceId: 'lg_cooktop',
-      deviceName: 'LG Induction',
-      modelName: 'BEF3AMB4E',
-      online: true,
-      isOperating: true,
-      powerState: 'ON',
-      burners: [{ burnerId: 'b1', isOperating: true, powerLevel: 8 }],
-    });
-    mockTuyaClient.getStatus.mockResolvedValueOnce({
-      online: true,
-      switch_1: true,
-      cur_power: 120,
-      cur_current: 500,
-      cur_voltage: 220,
-      fault: null,
-    });
-    await engine.evaluateAndExecute(baseTime);
-
-    // 2nd run: 30 seconds later (T = +30s < 90s), cooktop turned OFF
-    const tPlus30s = baseTime + 30 * 1000;
-    mockLgClient.getCooktopStatus.mockResolvedValueOnce({
-      deviceId: 'lg_cooktop',
-      deviceName: 'LG Induction',
-      modelName: 'BEF3AMB4E',
-      online: true,
-      isOperating: false,
-      powerState: 'OFF',
-      burners: [],
-    });
-    mockTuyaClient.getStatus.mockResolvedValueOnce({
-      online: true,
-      switch_1: true,
-      cur_power: 120,
-      cur_current: 500,
-      cur_voltage: 220,
-      fault: null,
-    });
-
-    const result2 = await engine.evaluateAndExecute(tPlus30s);
-
-    expect(result2.action).toBe('WAITING_SHUTDOWN_DELAY');
-    expect(result2.inductionState).toBe('OFF');
-    expect(result2.hoodState).toBe('ON');
-    expect(result2.remainingDelaySeconds).toBe(60); // 90s - 30s = 60s
-    expect(mockTuyaClient.setPlugState).not.toHaveBeenCalled();
-  });
-
-  it('should turn hood OFF after 1m 30s have elapsed since cooking stopped', async () => {
-    // 1st run: Cooktop active at T = 0
-    mockLgClient.getCooktopStatus.mockResolvedValueOnce({
-      deviceId: 'lg_cooktop',
-      deviceName: 'LG Induction',
-      modelName: 'BEF3AMB4E',
-      online: true,
-      isOperating: true,
-      powerState: 'ON',
-      burners: [{ burnerId: 'b1', isOperating: true, powerLevel: 8 }],
-    });
-    mockTuyaClient.getStatus.mockResolvedValueOnce({
-      online: true,
-      switch_1: true,
-      cur_power: 120,
-      cur_current: 500,
-      cur_voltage: 220,
-      fault: null,
-    });
-    await engine.evaluateAndExecute(baseTime);
-
-    // 2nd run: 1m 40s later (T = +100s >= 90s), cooktop OFF
-    const tPlus100s = baseTime + 100 * 1000;
-    mockLgClient.getCooktopStatus.mockResolvedValueOnce({
-      deviceId: 'lg_cooktop',
-      deviceName: 'LG Induction',
-      modelName: 'BEF3AMB4E',
-      online: true,
-      isOperating: false,
-      powerState: 'OFF',
-      burners: [],
-    });
-    mockTuyaClient.getStatus.mockResolvedValueOnce({
-      online: true,
-      switch_1: true,
-      cur_power: 120,
-      cur_current: 500,
-      cur_voltage: 220,
-      fault: null,
-    });
-    mockTuyaClient.setPlugState.mockResolvedValueOnce({
-      success: true,
-      changed: true,
-      currentState: false,
-      message: 'Plug turned OFF',
-    });
-
-    const result2 = await engine.evaluateAndExecute(tPlus100s);
-
-    expect(result2.action).toBe('TURN_OFF');
-    expect(result2.inductionState).toBe('OFF');
-    expect(result2.hoodState).toBe('OFF');
-    expect(result2.changed).toBe(true);
-    expect(mockTuyaClient.setPlugState).toHaveBeenCalledWith(false);
-  });
-
-  it('SAFEGUARD: should NOT turn hood OFF if LG ThinQ API fails', async () => {
-    mockLgClient.getCooktopStatus.mockRejectedValueOnce(new Error('LG API Timeout'));
-
-    const result = await engine.evaluateAndExecute(baseTime);
-
-    expect(result.action).toBe('SKIPPED_LG_ERROR');
-    expect(result.inductionState).toBe('UNKNOWN');
-    expect(mockTuyaClient.setPlugState).not.toHaveBeenCalled();
-  });
-
-  it('SAFEGUARD: should log error and return safely if Tuya API fails', async () => {
-    mockLgClient.getCooktopStatus.mockResolvedValueOnce({
-      deviceId: 'lg_cooktop',
-      deviceName: 'LG Induction',
-      modelName: 'BEF3AMB4E',
-      online: true,
-      isOperating: true,
-      powerState: 'ON',
-      burners: [{ burnerId: 'b1', isOperating: true, powerLevel: 5 }],
-    });
-    mockTuyaClient.getStatus.mockRejectedValueOnce(new Error('Tuya Cloud Network Error'));
-
-    const result = await engine.evaluateAndExecute(baseTime);
-
-    expect(result.action).toBe('SKIPPED_TUYA_ERROR');
-    expect(result.inductionState).toBe('ON');
-    expect(mockTuyaClient.setPlugState).not.toHaveBeenCalled();
-  });
+jest.mock('../../src/tuya/directCommand', () => ({sendDirectPlugCommand: jest.fn(async () => undefined)}));
+const command = sendDirectPlugCommand as jest.Mock;
+const on = {online: true, isOperating: true, powerState: 'ON'};
+const off = {online: true, isOperating: false, powerState: 'OFF'};
+const baseline = (overrides: Partial<HoodState> = {}): HoodState => ({
+  induction: 'OFF', desired: 'OFF', confirmed: 'OFF', offDetectedAt: 1000,
+  lastCommandAt: null, lastVerifiedAt: null, failureCount: 0,
+  nextRetryAt: 0, updatedAt: 1000, ...overrides,
+});
+function setup(status: any, initial: HoodState | null) {
+  let data = initial;
+  const store = {load: jest.fn(async () => data), save: jest.fn(async (v: HoodState) => {data = v;})};
+  const lg = {getCooktopStatus: jest.fn(async () => status)};
+  const tuya = {getStatus: jest.fn(async () => ({switch_1: false}))};
+  return {store, lg, tuya, engine: new AutomationEngine(lg as any, tuya as any, store)};
+}
+beforeEach(() => {
+  jest.clearAllMocks();
+  process.env.AUTOMATION_ENABLED = 'true';
+  process.env.TUYA_COMMANDS_ENABLED = 'true';
+  delete process.env.TUYA_PERIODIC_VERIFY;
+});
+test('disabled automation never makes external calls', async () => {
+  process.env.AUTOMATION_ENABLED = 'false';
+  const s = setup(on, baseline());
+  await s.engine.evaluateAndExecute(200000);
+  expect(s.lg.getCooktopStatus).not.toHaveBeenCalled();
+  expect(s.tuya.getStatus).not.toHaveBeenCalled();
+  expect(command).not.toHaveBeenCalled();
+});
+test('unchanged OFF consumes zero Tuya requests', async () => {
+  const s = setup(off, baseline());
+  expect((await s.engine.evaluateAndExecute(200000)).action).toBe('ALREADY_OFF');
+  expect(s.tuya.getStatus).not.toHaveBeenCalled();
+  expect(command).not.toHaveBeenCalled();
+});
+test('ON transition sends one direct command without GET', async () => {
+  const s = setup(on, baseline());
+  expect((await s.engine.evaluateAndExecute(200000)).action).toBe('TURN_ON');
+  expect(command).toHaveBeenCalledWith(true);
+  expect(s.tuya.getStatus).not.toHaveBeenCalled();
+});
+test('OFF is delayed from first OFF detection', async () => {
+  const s = setup(off, baseline({induction: 'ON', desired: 'ON', confirmed: 'ON', offDetectedAt: null}));
+  const r = await s.engine.evaluateAndExecute(100000);
+  expect(r.action).toBe('WAITING_SHUTDOWN_DELAY');
+  expect(r.remainingDelaySeconds).toBe(90);
+  expect(command).not.toHaveBeenCalled();
+});
+test('first execution initializes only', async () => {
+  const s = setup(on, null);
+  await s.engine.evaluateAndExecute(200000);
+  expect(command).not.toHaveBeenCalled();
+  expect(s.tuya.getStatus).not.toHaveBeenCalled();
+});
+test('offline LG cannot turn hood off', async () => {
+  const s = setup({...off, online: false}, baseline());
+  expect((await s.engine.evaluateAndExecute(200000)).action).toBe('SKIPPED_LG_ERROR');
+  expect(command).not.toHaveBeenCalled();
+});
+test('successful prior command is checked after cooldown', async () => {
+  const s = setup(on, baseline({induction: 'ON', desired: 'ON', confirmed: 'UNKNOWN', lastCommandAt: 100000, nextRetryAt: 160000}));
+  (s.tuya.getStatus as jest.Mock).mockResolvedValue({switch_1: true});
+  expect((await s.engine.evaluateAndExecute(200000)).action).toBe('ALREADY_ON');
+  expect(s.tuya.getStatus).toHaveBeenCalledTimes(1);
+  expect(command).not.toHaveBeenCalled();
 });

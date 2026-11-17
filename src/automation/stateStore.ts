@@ -1,68 +1,32 @@
-import fs from 'fs';
-import path from 'path';
-import { AutomationStoreState } from './types';
+import { getStore } from '@netlify/blobs';
 
-const STATE_FILE_PATH = process.env.AUTOMATION_STATE_PATH || path.join('/tmp', 'lg-hood-automation-state.json');
-
-let memoryState: AutomationStoreState = {
-  lastInductionState: 'UNKNOWN',
-  lastActiveTimestamp: 0,
-  lastOffDetectedTimestamp: 0,
-  lastHoodCommand: 'NONE',
-  lastEvaluatedAt: 0,
-};
-
-export class AutomationStateStore {
-  public static loadState(): AutomationStoreState {
-    try {
-      if (fs.existsSync(STATE_FILE_PATH)) {
-        const raw = fs.readFileSync(STATE_FILE_PATH, 'utf8');
-        const parsed = JSON.parse(raw);
-        memoryState = {
-          ...memoryState,
-          ...parsed,
-        };
-      }
-    } catch {
-      // Fallback to memoryState if file read fails
-    }
-    return { ...memoryState };
+export type Power = 'ON' | 'OFF';
+export interface HoodState {
+  induction: Power | 'UNKNOWN';
+  desired: Power | 'UNKNOWN';
+  confirmed: Power | 'UNKNOWN';
+  offDetectedAt: number | null;
+  lastCommandAt: number | null;
+  lastVerifiedAt: number | null;
+  failureCount: number;
+  nextRetryAt: number;
+  updatedAt: number;
+}
+export interface StateRepository {
+  load(): Promise<HoodState | null>;
+  save(value: HoodState): Promise<void>;
+}
+export class BlobStateRepository implements StateRepository {
+  private store() {
+    return getStore({
+      name: process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod',
+      consistency: 'strong',
+    });
   }
-
-  public static saveState(newState: Partial<AutomationStoreState>): AutomationStoreState {
-    memoryState = {
-      ...memoryState,
-      ...newState,
-      lastEvaluatedAt: Date.now(),
-    };
-
-    try {
-      const dir = path.dirname(STATE_FILE_PATH);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(memoryState, null, 2), 'utf8');
-    } catch {
-      // Ignore file write errors in restricted environments
-    }
-
-    return { ...memoryState };
+  async load(): Promise<HoodState | null> {
+    return await this.store().get('hood-state', { type: 'json', consistency: 'strong' }) as HoodState | null;
   }
-
-  public static resetState(): void {
-    memoryState = {
-      lastInductionState: 'UNKNOWN',
-      lastActiveTimestamp: 0,
-      lastOffDetectedTimestamp: 0,
-      lastHoodCommand: 'NONE',
-      lastEvaluatedAt: 0,
-    };
-    try {
-      if (fs.existsSync(STATE_FILE_PATH)) {
-        fs.unlinkSync(STATE_FILE_PATH);
-      }
-    } catch {
-      // Ignore
-    }
+  async save(value: HoodState): Promise<void> {
+    await this.store().setJSON('hood-state', value);
   }
 }

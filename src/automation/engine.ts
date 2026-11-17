@@ -1,163 +1,140 @@
 import { LgThinQClient } from '../lg/client';
 import { TuyaClient } from '../tuya/client';
-import { AutomationStateStore } from './stateStore';
-import {
-  AutomationResult,
-  AutomationAction,
-  StructuredLogEvent,
-} from './types';
+import { sendDirectPlugCommand } from '../tuya/directCommand';
+import { BlobStateRepository, HoodState, Power, StateRepository } from './stateStore';
+import { AutomationResult } from './types';
+import { notifyIncident } from './notification';
 
-// Default shutdown delay: 1 minute 30 seconds (90,000 ms), configurable via process.env.SHUTDOWN_DELAY_SECONDS
-export const SHUTDOWN_DELAY_MS = Number(process.env.SHUTDOWN_DELAY_SECONDS || 90) * 1000;
+export const SHUTDOWN_DELAY_MS = Math.max(0, Number(process.env.SHUTDOWN_DELAY_SECONDS ?? 90)) * 1000;
+const retryMs = () => Math.max(60, Number(process.env.CONTROL_RETRY_SECONDS ?? 300)) * 1000;
+const verificationMs = () => Math.max(3600, Number(process.env.TUYA_VERIFY_SECONDS ?? 86400)) * 1000;
 
 export class AutomationEngine {
-  private lgClient: LgThinQClient;
-  private tuyaClient: TuyaClient;
+  constructor(
+    private readonly lgClient = new LgThinQClient(),
+    private readonly tuyaClient = new TuyaClient(),
+    private readonly store: StateRepository = new BlobStateRepository(),
+  ) {}
 
-  constructor(lgClient?: LgThinQClient, tuyaClient?: TuyaClient) {
-    this.lgClient = lgClient || new LgThinQClient();
-    this.tuyaClient = tuyaClient || new TuyaClient();
-  }
+  async evaluateAndExecute(now = Date.now()): Promise<AutomationResult> {
+    const evaluatedAt = new Date(now).toISOString();
+    const result = (
+      action: AutomationResult['action'], inductionState: AutomationResult['inductionState'],
+      hoodState: AutomationResult['hoodState'], message: string, changed = false, remainingDelaySeconds = 0,
+    ): AutomationResult => ({ action, inductionState, hoodState, changed, remainingDelaySeconds, message, evaluatedAt });
 
-  public async evaluateAndExecute(currentTime?: number): Promise<AutomationResult> {
-    const now = currentTime || Date.now();
-    const isoTimestamp = new Date(now).toISOString();
+    // Default disabled: no external network calls, and no writes to Blobs.
+    if (process.env.AUTOMATION_ENABLED !== 'true')
+      return result('SKIPPED_TUYA_ERROR', 'UNKNOWN', 'UNKNOWN', 'Automation is disabled.');
 
-    let lgStatus;
-    try {
-      lgStatus = await this.lgClient.getCooktopStatus();
-    } catch (err: any) {
-      console.error('[LG API Failure]', err.message);
+    let lg;
+    try { lg = await this.lgClient.getCooktopStatus(); }
+    catch { return result('SKIPPED_LG_ERROR', 'UNKNOWN', 'UNKNOWN', 'LG API unavailable; hood unchanged.'); }
+    if (!lg.online || lg.powerState === 'UNKNOWN')
+      return result('SKIPPED_LG_ERROR', 'UNKNOWN', 'UNKNOWN', 'LG state offline or unknown; hood unchanged.');
 
-      const result: AutomationResult = {
-        action: 'SKIPPED_LG_ERROR',
-        inductionState: 'UNKNOWN',
-        hoodState: 'UNKNOWN',
-        changed: false,
-        remainingDelaySeconds: 0,
-        message: `LG ThinQ API error: ${err.message}. Safely maintaining current hood state.`,
-        evaluatedAt: isoTimestamp,
+    const induction: Power = lg.isOperating ? 'ON' : 'OFF';
+    let state: HoodState | null;
+    try { state = await this.store.load(); }
+    catch { return result('SKIPPED_TUYA_ERROR', induction, 'UNKNOWN', 'State store unavailable; hood unchanged.'); }
+    if (!state) {
+      const initial: HoodState = {
+        induction, desired: 'UNKNOWN', confirmed: 'UNKNOWN',
+        offDetectedAt: induction === 'OFF' ? now : null,
+        lastCommandAt: null, lastVerifiedAt: null, failureCount: 0, nextRetryAt: 0, updatedAt: now,
       };
-
-      this.logStructuredEvent(result, now);
-      return result;
+      await this.store.save(initial);
+      return result('WAITING_SHUTDOWN_DELAY', induction, 'UNKNOWN', 'Initialized persistent state; no device command.');
     }
 
-    let tuyaStatus;
-    try {
-      tuyaStatus = await this.tuyaClient.getStatus();
-    } catch (err: any) {
-      console.error('[Tuya API Failure]', err.message);
+    const next: HoodState = { ...state, induction, updatedAt: now };
+    next.offDetectedAt = induction === 'OFF' ? (state.induction === 'OFF' ? state.offDetectedAt ?? now : now) : null;
+    const remaining = induction === 'OFF' ? Math.max(0, next.offDetectedAt! + SHUTDOWN_DELAY_MS - now) : 0;
+    const target: Power | null = induction === 'ON' ? 'ON' : remaining === 0 ? 'OFF' : null;
+    if (!target) {
+      await this.store.save(next);
+      return result('WAITING_SHUTDOWN_DELAY', induction, next.confirmed, 'Waiting after first OFF observation.', false, Math.ceil(remaining / 1000));
+    }
+    next.desired = target;
 
-      const result: AutomationResult = {
-        action: 'SKIPPED_TUYA_ERROR',
-        inductionState: lgStatus.isOperating ? 'ON' : 'OFF',
-        hoodState: 'UNKNOWN',
-        changed: false,
-        remainingDelaySeconds: 0,
-        message: `Tuya API error: ${err.message}. Could not query smart plug state.`,
-        evaluatedAt: isoTimestamp,
-      };
-
-      this.logStructuredEvent(result, now);
-      return result;
+    // One initial status read, never a read on every scheduled invocation.
+    if (state.desired === 'UNKNOWN' && state.confirmed === 'UNKNOWN') {
+      try {
+        const observed = await this.tuyaClient.getStatus();
+        next.confirmed = observed.switch_1 ? 'ON' : 'OFF';
+        next.lastVerifiedAt = now;
+        await this.store.save(next);
+        return result('WAITING_SHUTDOWN_DELAY', induction, next.confirmed, 'Established hardware baseline; no command.');
+      } catch {
+        return result('SKIPPED_TUYA_ERROR', induction, 'UNKNOWN', 'Tuya baseline read failed.');
+      }
     }
 
-    const state = AutomationStateStore.loadState();
-    const lgIsActive = lgStatus.isOperating;
-    const plugIsOn = tuyaStatus.switch_1;
+    const verifyDue = process.env.TUYA_PERIODIC_VERIFY === 'true'
+      && (!state.lastVerifiedAt || now - state.lastVerifiedAt >= verificationMs());
 
-    let action: AutomationAction;
-    let changed = false;
-    let remainingDelaySeconds = 0;
-    let message = '';
-    let finalHoodState: 'ON' | 'OFF' = plugIsOn ? 'ON' : 'OFF';
+    if (state.confirmed === target && !verifyDue) {
+      await this.store.save(next);
+      return result(target === 'ON' ? 'ALREADY_ON' : 'ALREADY_OFF', induction, target, 'Cached target matches; no Tuya API request.');
+    }
 
-    if (lgIsActive) {
-      // Cooktop is operating -> Hood MUST be ON immediately
-      AutomationStateStore.saveState({
-        lastInductionState: 'ON',
-        lastActiveTimestamp: now,
-        lastOffDetectedTimestamp: 0,
-        lastHoodCommand: 'ON',
-      });
-
-      if (plugIsOn) {
-        action = 'ALREADY_ON';
-        changed = false;
-        message = 'Induction cooktop is ACTIVE. Hood plug is already ON.';
-      } else {
-        const controlRes = await this.tuyaClient.setPlugState(true);
-        action = 'TURN_ON';
-        changed = controlRes.changed;
-        finalHoodState = 'ON';
-        message = 'Induction cooktop active. Turned kitchen hood plug ON.';
+    // Command acceptance is not physical verification. Re-check after cooldown.
+    if (state.confirmed === 'UNKNOWN' && state.lastCommandAt && now >= state.nextRetryAt && state.desired === target) {
+      try {
+        const observed = await this.tuyaClient.getStatus();
+        next.lastVerifiedAt = now;
+        next.confirmed = observed.switch_1 ? 'ON' : 'OFF';
+        if (next.confirmed === target) {
+          next.failureCount = 0;
+          await this.store.save(next);
+          return result(target === 'ON' ? 'ALREADY_ON' : 'ALREADY_OFF', induction, target, 'Verified previously accepted command.');
+        }
+      } catch {
+        next.nextRetryAt = now + retryMs();
+        await this.store.save(next);
+        await notifyIncident('HOOD_UNVERIFIED', '명령 후 Tuya 상태 확인에 실패했습니다.');
+        return result('SKIPPED_TUYA_ERROR', induction, 'UNKNOWN', 'Post-command verification failed; retry delayed.');
       }
-    } else {
-      // Cooktop is INACTIVE -> Evaluate 3-minute shutdown delay
-      const lastActive = state.lastActiveTimestamp;
+    }
 
-      let timeSinceActive = Infinity;
-      if (lastActive > 0) {
-        timeSinceActive = now - lastActive;
-      }
-
-      if (timeSinceActive < SHUTDOWN_DELAY_MS) {
-        // Shutdown delay pending -> Keep hood ON
-        const remainingMs = SHUTDOWN_DELAY_MS - timeSinceActive;
-        remainingDelaySeconds = Math.ceil(remainingMs / 1000);
-        action = 'WAITING_SHUTDOWN_DELAY';
-        changed = false;
-
-        const secondsSinceOff = Math.round(timeSinceActive / 1000);
-        message = `Induction stopped ${secondsSinceOff}s ago. Waiting 1m 30s shutdown delay (${remainingDelaySeconds}s remaining) before turning hood OFF.`;
-      } else {
-        // Delay elapsed (or no active history) -> Hood MUST be OFF
-        AutomationStateStore.saveState({
-          lastInductionState: 'OFF',
-          lastHoodCommand: 'OFF',
-        });
-
-        if (!plugIsOn) {
-          action = 'ALREADY_OFF';
-          changed = false;
-          message = 'Induction inactive for >= 1m 30s. Hood plug is already OFF.';
-        } else {
-          const controlRes = await this.tuyaClient.setPlugState(false);
-          action = 'TURN_OFF';
-          changed = controlRes.changed;
-          finalHoodState = 'OFF';
-          message = 'Induction inactive for >= 1m 30s. Turned kitchen hood plug OFF.';
+    if (state.failureCount >= 3) {
+      await notifyIncident('TUYA_UNAVAILABLE', '명령 실패 누적으로 제어가 차단되었습니다.');
+      await this.store.save(next);
+      return result('SKIPPED_TUYA_ERROR', induction, state.confirmed, 'Circuit breaker open; manual reset required.');
+    }
+    if (now < state.nextRetryAt) {
+      await this.store.save(next);
+      return result('SKIPPED_TUYA_ERROR', induction, state.confirmed, 'Command cooldown/backoff active.');
+    }
+    if (process.env.TUYA_COMMANDS_ENABLED !== 'true') {
+      await this.store.save(next);
+      return result('SKIPPED_TUYA_ERROR', induction, state.confirmed, 'Commands disabled.');
+    }
+    try {
+      if (verifyDue && state.confirmed === target) {
+        const observed = await this.tuyaClient.getStatus();
+        next.confirmed = observed.switch_1 ? 'ON' : 'OFF';
+        next.lastVerifiedAt = now;
+        if (next.confirmed === target) {
+          await this.store.save(next);
+          return result(target === 'ON' ? 'ALREADY_ON' : 'ALREADY_OFF', induction, target, 'Periodic verification matched.');
         }
       }
+      await sendDirectPlugCommand(target === 'ON');
+      next.confirmed = 'UNKNOWN'; // Accepted != physically confirmed.
+      next.lastCommandAt = now;
+      next.lastVerifiedAt = null;
+      next.failureCount = 0;
+      next.nextRetryAt = now + retryMs();
+      await this.store.save(next);
+      return result(target === 'ON' ? 'TURN_ON' : 'TURN_OFF', induction, 'UNKNOWN', 'Tuya command accepted; physical state unverified.', true);
+    } catch {
+      next.confirmed = 'UNKNOWN';
+      next.failureCount = state.failureCount + 1;
+      next.nextRetryAt = now + Math.min(3600000, retryMs() * Math.pow(2, Math.min(5, next.failureCount - 1)));
+      await this.store.save(next);
+      await notifyIncident('TUYA_UNAVAILABLE', '후드 전원 변경 명령이 실패했습니다.');
+      return result('SKIPPED_TUYA_ERROR', induction, 'UNKNOWN', 'Tuya command failed; retry delayed.');
     }
-
-    const result: AutomationResult = {
-      action,
-      inductionState: lgIsActive ? 'ON' : 'OFF',
-      hoodState: finalHoodState,
-      changed,
-      remainingDelaySeconds,
-      message,
-      evaluatedAt: isoTimestamp,
-    };
-
-    this.logStructuredEvent(result, now);
-    return result;
-  }
-
-  private logStructuredEvent(result: AutomationResult, now: number): void {
-    const logEvent: StructuredLogEvent = {
-      event: 'hood_automation',
-      induction: result.inductionState,
-      hood: result.hoodState,
-      action: result.action,
-      changed: result.changed,
-      remainingDelaySeconds: result.remainingDelaySeconds,
-      message: result.message,
-      timestamp: new Date(now).toISOString(),
-    };
-
-    console.log(JSON.stringify(logEvent));
   }
 }
