@@ -22,3 +22,11 @@ test('dashboard displays persistence proof and never enables deploy-only control
  expect(html).toContain("data.controlMode==='DEPLOY' || !eligible");
  expect(html).toContain("set('storageAt',date(storage.latestRunAt))");
 });
+
+test('manual live test buttons are enabled only after authenticated eligibility',()=>{
+ expect(html).toContain('id="testStatus" disabled');
+ expect(html).toContain('id="testOn" disabled');
+ expect(html).toContain('id="testOff" disabled');
+ expect(html).toContain("$('testStatus').disabled=!data.manualLiveTestEnabled");
+ expect(html).toContain("if(action!=='status' && !confirm");
+});

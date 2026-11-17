@@ -3,7 +3,7 @@ import { getStore, connectLambda } from '@netlify/blobs';
 import crypto from 'crypto';
 import type { HoodState } from '../../src/automation/stateStore';
 import type { RunRecord } from '../../src/automation/monitor';
-import { runtimeEnabled, mayArmFromDashboard, armingBlockers } from '../../src/automation/runtimeSwitch';
+import { runtimeEnabled, mayArmFromDashboard, armingBlockers, manualLiveTestEnabled } from '../../src/automation/runtimeSwitch';
 
 const headers = {
   'Content-Type': 'application/json; charset=utf-8',
@@ -93,6 +93,7 @@ export const handler: Handler = async (event) => {
     body: JSON.stringify({
       serverTime: new Date().toISOString(),
       automationEnabled: active, canArmFromDashboard: canArm, armingBlockers: armingBlockers(event.headers.host),
+      manualLiveTestEnabled: manualLiveTestEnabled(),
       controlMode: process.env.AUTOMATION_CONTROL_MODE === 'deploy' ? 'DEPLOY' : 'DISABLED',
       storageEvidence: {
         latestRunFound: run !== null,
