@@ -41,7 +41,7 @@ test('bad token cannot change runtime state',async()=>{
 test('dashboard ON is blocked in deploy-only control mode',async()=>{
  Object.assign(process.env,{AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',ENABLE_DASHBOARD_ARMING:'true',SITE_ID:'178acf14-19c5-40c9-b50e-3a11162a0412',URL:'https://sweethome-automation.netlify.app'});
  expect(mayArmFromDashboard('sweethome-automation.netlify.app')).toBe(false);
- expect(armingBlockers('sweethome-automation.netlify.app')).toContain('SCHEDULED_AUTOMATION_DISABLED_DURING_LIVE_TEST');
+ expect(armingBlockers('sweethome-automation.netlify.app')).toContain('DASHBOARD_ON_UNSUPPORTED_USE_DEPLOY_CONTROL');
  const response=await request(true);
  expect(response.statusCode).toBe(409);
  expect(store.setJSON).not.toHaveBeenCalled();
@@ -59,5 +59,20 @@ test('preview host cannot arm even with production site env',async()=>{
 test('manual test can be enabled without enabling scheduled automation',async()=>{
  Object.assign(process.env,{LIVE_TEST_ENABLED:'true',MANUAL_AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true'});
  expect(manualLiveTestEnabled()).toBe(true);
+ expect(await runtimeEnabled()).toBe(false);
+});
+
+test('explicit existing flags enable production scheduled automation',async()=>{
+ Object.assign(process.env,{AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',TUYA_DAILY_API_LIMIT:'8',
+ SITE_ID:'178acf14-19c5-40c9-b50e-3a11162a0412',URL:'https://sweethome-automation.netlify.app'});
+ expect(await runtimeEnabled()).toBe(true);
+ expect(store.get).not.toHaveBeenCalled();
+});
+test('preview and overbudget fail closed',async()=>{
+ Object.assign(process.env,{AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',TUYA_DAILY_API_LIMIT:'8',
+ SITE_ID:'178acf14-19c5-40c9-b50e-3a11162a0412',URL:'https://preview.example.com'});
+ expect(await runtimeEnabled()).toBe(false);
+ process.env.URL='https://sweethome-automation.netlify.app';
+ process.env.TUYA_DAILY_API_LIMIT='9';
  expect(await runtimeEnabled()).toBe(false);
 });
