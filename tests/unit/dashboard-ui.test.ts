@@ -15,3 +15,10 @@ test('refresh or failed request leaves controls disabled until authenticated dat
   expect(html).toContain("$('refresh').disabled=true;$('switchOn').disabled=true;$('switchOff').disabled=true");
   expect(html).toContain("set('switchFeedback','운영 상태 조회 실패 · ON 버튼 비활성화')");
 });
+
+test('dashboard displays persistence proof and never enables deploy-only controls',()=>{
+ expect(html).toContain('id="storageState"');
+ expect(html).toContain('id="readiness"');
+ expect(html).toContain("data.controlMode==='DEPLOY' || !eligible");
+ expect(html).toContain("set('storageAt',date(storage.latestRunAt))");
+});

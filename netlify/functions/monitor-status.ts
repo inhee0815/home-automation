@@ -94,7 +94,27 @@ export const handler: Handler = async (event) => {
       serverTime: new Date().toISOString(),
       automationEnabled: active, canArmFromDashboard: canArm, armingBlockers: armingBlockers(event.headers.host),
       controlMode: process.env.AUTOMATION_CONTROL_MODE === 'deploy' ? 'DEPLOY' : 'DISABLED',
-      storageEvidence: { latestRunFound: run !== null, latestRunAt: run?.time ?? null, latestRunAgeSeconds: run?.time ? Math.max(0,Math.round((Date.now()-Date.parse(run.time))/1000)) : null, latestReadOk: !warnings.includes('LATEST_RUN_UNAVAILABLE') && !warnings.includes('BLOBS_STORE_UNAVAILABLE') },
+      storageEvidence: {
+        latestRunFound: run !== null,
+        latestRunAt: run?.time ?? null,
+        latestRunAgeSeconds: run?.time && Number.isFinite(Date.parse(run.time)) ? Math.max(0,Math.round((Date.now()-Date.parse(run.time))/1000)) : null,
+        latestReadOk: !warnings.includes('LATEST_RUN_UNAVAILABLE') && !warnings.includes('BLOBS_STORE_UNAVAILABLE'),
+        status: warnings.includes('LATEST_RUN_UNAVAILABLE') || warnings.includes('BLOBS_STORE_UNAVAILABLE')
+          ? 'READ_ERROR'
+          : !run ? 'NO_RECORD' : Number.isFinite(Date.parse(run.time)) && Date.now()-Date.parse(run.time)<=180000 ? 'HEALTHY' : 'STALE',
+      },
+      restartReadiness: {
+        status: 'NOT_READY',
+        reasons: [
+          ...(process.env.AUTOMATION_RESTART_APPROVED === 'true' ? [] : ['RESTART_APPROVAL_MISSING']),
+          ...(process.env.TUYA_TRIAL_QUOTA_VERIFIED === 'true' ? [] : ['TUYA_TRIAL_QUOTA_UNVERIFIED']),
+          'TUYA_HARD_QUOTA_NOT_ENFORCED',
+          'LG_DEVICE_MAPPING_NOT_FIELD_VERIFIED',
+          'HOOD_PHYSICAL_BEHAVIOR_NOT_FIELD_VERIFIED',
+          'IMMEDIATE_STOP_NOT_AVAILABLE',
+        ],
+        canResumeSafely: false,
+      },
       commandsEnabled: process.env.TUYA_COMMANDS_ENABLED === 'true',
       status, partialData: warnings.length > 0, warnings,
       latestRun: run,

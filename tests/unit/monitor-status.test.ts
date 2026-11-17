@@ -79,3 +79,12 @@ test('latest persisted run is surfaced with read evidence',async()=>{
  expect(data.storageEvidence.latestRunFound).toBe(true);
  expect(data.storageEvidence.latestReadOk).toBe(true);
 });
+
+test('authenticated dashboard exposes safe storage and conservative readiness status', async()=>{
+ store.get.mockImplementation(async(key:string)=>key==='monitor/latest'?{time:new Date().toISOString(),outcome:'PAUSED',action:'PAUSED',induction:'UNKNOWN',hood:'UNKNOWN'}:null);
+ const response=await request('test-admin');
+ const data=JSON.parse(response.body);
+ expect(data.storageEvidence.status).toBe('HEALTHY');
+ expect(data.restartReadiness.canResumeSafely).toBe(false);
+ expect(data.restartReadiness.reasons).toContain('TUYA_HARD_QUOTA_NOT_ENFORCED');
+});

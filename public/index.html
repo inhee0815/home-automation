@@ -34,6 +34,14 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
  <div class="tile"><div class="label">오늘 Tuya API 요청</div><div class="value" id="quota">—</div><small>추정 사용량 · 실제 청구량 아님</small></div>
  <div class="tile"><div class="label">후드 제어 결과</div><div class="value" id="hood">—</div><small id="hoodSub">실제 팬 회전 여부는 확인 불가</small></div>
 </div>
+<section class="surface"><h2>저장소 · 재개 준비 상태</h2>
+<div class="grid" style="margin-bottom:0">
+ <div class="tile"><div class="label">Blobs 기록 읽기</div><div class="value" id="storageState">—</div><small id="storageSub">인증 후 조회</small></div>
+ <div class="tile"><div class="label">마지막 기록 시각</div><div class="value" id="storageAt">—</div><small>쓰기 로그와 대조해 읽기 확인</small></div>
+ <div class="tile"><div class="label">재개 준비</div><div class="value" id="readiness">—</div><small>API 호출량 하드캡과 실기기 검증 필요</small></div>
+ <div class="tile"><div class="label">제어 방식</div><div class="value" id="controlMode">—</div><small>배포 전용 · 대시보드 즉시 ON/OFF 불가</small></div>
+</div>
+<p id="readinessReasons" class="warning" aria-live="polite">실제 기기 제어는 안전 점검 전까지 중단합니다.</p></section>
 <section class="surface"><h2>자동화 안전 스위치</h2>
 <p>자동화 ON은 별도 운영 승인 설정과 API 보호 장치가 갖춰진 경우에만 허용됩니다. OFF는 Tuya 플러그 전원을 끄는 것이 아니라 자동 제어 명령을 중단합니다.</p>
 <div class="controls"><button id="switchOff" disabled>자동화 OFF</button><button id="switchOn" disabled>자동화 ON</button></div>
@@ -57,7 +65,7 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
  const empty=(el,span)=>{el.replaceChildren();const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=span;td.textContent='기록 없음';tr.append(td);el.append(tr)};
  const rows=(id,items,keys)=>{const root=$(id);root.replaceChildren();if(!items.length){empty(root,keys.length);return}
    for(const item of items){const tr=document.createElement('tr');for(const fn of keys){const td=document.createElement('td');td.textContent=String(fn(item)??'—');tr.append(td)}root.append(tr)}};
- const clear=()=>{key='';$('token').value='';set('feedback','관리자 토큰을 지웠습니다.');$('switchOff').disabled=true;$('switchOn').disabled=true;};
+ const clear=()=>{key='';$('token').value='';set('feedback','관리자 토큰을 지웠습니다.');$('switchOff').disabled=true;$('switchOn').disabled=true;set('storageState','—');set('readiness','—');set('readinessReasons','인증 후 확인');};
  $('clear').onclick=clear;
  async function changeSwitch(enabled){
   if(enabled && $('switchOn').disabled){set('switchFeedback','ON 버튼이 잠긴 상태입니다. 운영 상태를 다시 조회하세요.');return}
@@ -86,16 +94,31 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
    // Quota usage/store failures are safety-relevant and keep ON disabled.
    const criticalWarnings=(data.warnings||[]).filter(w=>['TUYA_USAGE_UNAVAILABLE','BLOBS_STORE_UNAVAILABLE'].includes(w));
    const eligible=Boolean(data.canArmFromDashboard) && criticalWarnings.length===0;
-   $('switchOff').disabled=false;
-   $('switchOn').disabled=!eligible;
+   $('switchOff').disabled=data.controlMode==='DEPLOY';
+   $('switchOn').disabled=data.controlMode==='DEPLOY' || !eligible;
    const blockers=[
     ...(data.armingBlockers||[]),
     ...criticalWarnings,
    ];
-   set('switchFeedback',eligible
-    ? ((data.partialData ? '부가 모니터링 데이터 일부 조회 실패 · ' : '')+'자동화 ON 선택 가능')
-    : 'ON 잠금: '+(blockers.length?blockers.join(', '):'활성화 조건 확인 실패'));
+   set('switchFeedback',data.controlMode==='DEPLOY'
+    ? '배포 전용 제어: 대시보드 ON/OFF 사용 불가 · 환경 변수 변경 후 재배포 필요 (즉시 정지 아님)'
+    : eligible ? '자동화 ON 선택 가능' : 'ON 잠금: '+(blockers.length?blockers.join(', '):'활성화 조건 확인 실패'));
 
+   const storage=data.storageEvidence||{};
+   const storageLabels={HEALTHY:'정상',STALE:'기록 지연',READ_ERROR:'읽기 실패',NO_RECORD:'기록 없음'};
+   set('storageState',storageLabels[storage.status]||'확인 불가');
+   set('storageSub',storage.latestRunAgeSeconds===null||storage.latestRunAgeSeconds===undefined?'읽기 상태를 확인하세요':'마지막 기록 '+storage.latestRunAgeSeconds+'초 전');
+   set('storageAt',date(storage.latestRunAt));
+   set('readiness',data.restartReadiness?.canResumeSafely?'준비 완료':'재개 보류');
+   set('readinessReasons',(data.restartReadiness?.reasons||[]).map(x=>({
+      RESTART_APPROVAL_MISSING:'재개 승인 없음',
+      TUYA_TRIAL_QUOTA_UNVERIFIED:'Tuya Trial 잔여 한도 미확인',
+      TUYA_HARD_QUOTA_NOT_ENFORCED:'Tuya API 정확한 호출 상한 미보장',
+      LG_DEVICE_MAPPING_NOT_FIELD_VERIFIED:'LG 실제 상태 응답 미검증',
+      HOOD_PHYSICAL_BEHAVIOR_NOT_FIELD_VERIFIED:'후드 실물 동작 미검증',
+      IMMEDIATE_STOP_NOT_AVAILABLE:'즉시 정지 기능 없음',
+    })[x]||x).join(' · ')||'재개 상태를 확인하세요');
+   set('controlMode',data.controlMode==='DEPLOY'?'배포 전용':'사용 안 함');
    set('overall',data.status);set('mode',data.status);set('modeSub',data.commandsEnabled?'제어 허용':'명령 차단');
    set('last',data.latestRun?date(data.latestRun.time):'기록 없음');set('lastSub',data.latestRun?.action||'실행 기록 없음');
    set('quota',(data.tuya.attempts===null?'조회 실패':data.tuya.attempts)+' / '+data.tuya.limit);

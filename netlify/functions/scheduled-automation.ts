@@ -2,7 +2,7 @@ import { schedule } from '@netlify/functions';
 import { connectLambda } from '@netlify/blobs';
 import { AutomationEngine } from '../../src/automation/engine';
 import { notifyAutomationResult, notifyIncident } from '../../src/automation/notification';
-import { recordRun } from '../../src/automation/monitor';
+import { recordRun, verifyRecordedRunReadback } from '../../src/automation/monitor';
 import { runtimeEnabled } from '../../src/automation/runtimeSwitch';
 
 export const rawHandler = async (event?: Parameters<Parameters<typeof schedule>[1]>[0]) => {
@@ -10,6 +10,8 @@ export const rawHandler = async (event?: Parameters<Parameters<typeof schedule>[
   if (event) connectLambda(event as unknown as Parameters<typeof connectLambda>[0]);
 
   if (!(await runtimeEnabled())) {
+    // Read the previous heartbeat before writing a new one; no additional vendor API calls.
+    await verifyRecordedRunReadback();
     const monitorRecorded = await recordRun('PAUSED');
     return {statusCode:200,body:JSON.stringify({ok:true,skipped:true,monitorRecorded,reason:'Automation safety interlock is off'})};
   }
