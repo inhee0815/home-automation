@@ -1,21 +1,23 @@
 import { schedule } from '@netlify/functions';
 import { AutomationEngine } from '../../src/automation/engine';
-import { notifyAutomationResult } from '../../src/automation/notification';
+import { notifyAutomationResult, notifyIncident } from '../../src/automation/notification';
+import { recordRun } from '../../src/automation/monitor';
 
 export const rawHandler = async () => {
   if (process.env.AUTOMATION_ENABLED !== 'true') {
-    return {statusCode: 200, body: JSON.stringify({ok: true, skipped: true, reason: 'AUTOMATION_ENABLED is not true'})};
+    await recordRun('PAUSED');
+    return {statusCode:200,body:JSON.stringify({ok:true,skipped:true,reason:'AUTOMATION_ENABLED is not true'})};
   }
   try {
     const result = await new AutomationEngine().evaluateAndExecute();
-    console.log(JSON.stringify({event: 'hood_automation', ...result}));
+    await recordRun(result.action.startsWith('SKIPPED_') ? 'ERROR' : 'OK', result);
     await notifyAutomationResult(result);
-    return {statusCode: 200, body: JSON.stringify({ok: true, data: result})};
+    console.log(JSON.stringify({event:'hood_automation',...result}));
+    return {statusCode:200,body:JSON.stringify({ok:true,data:result})};
   } catch {
-    console.error('Scheduled hood automation failed');
-    const { notifyIncident } = await import('../../src/automation/notification');
-    await notifyIncident('TUYA_UNAVAILABLE', '자동화 실행 중 예상하지 못한 오류가 발생했습니다.');
-    return {statusCode: 500, body: JSON.stringify({ok: false, error: 'Automation failed'})};
+    await recordRun('ERROR');
+    await notifyIncident('TUYA_UNAVAILABLE','Unexpected automation evaluation failure');
+    return {statusCode:500,body:JSON.stringify({ok:false,error:'Automation failed'})};
   }
 };
-export const handler = schedule('* * * * *', rawHandler);
+export const handler = schedule('* * * * *',rawHandler);

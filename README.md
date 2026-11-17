@@ -85,12 +85,29 @@ npm run dev
 - **Not a strict contractual hard cap:** Blobs has no transactional counter/lock; overlapping invocations and out-of-band API calls can violate the effective limit. A DB transaction or single-writer queue is required for a provable hard cap.
 - `TUYA_QUOTA_GUARD_ENABLED`, `AUTOMATION_ENABLED`, `TUYA_COMMANDS_ENABLED` all default disabled. Do not turn any of them on until the CI build, actual-device status mapping, access controls and concurrency strategy are verified.
 
-## 장애 푸시 알림 (Telegram, 추가 설정 필요)
 
-`ALERTS_ENABLED=true`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`를 Netlify Functions 환경 변수로 설정하면 Telegram으로 장애 알림을 보냅니다. 사용자 승인 없이 봇이나 채팅방을 자동 생성할 수 없으므로 **설정 전에는 휴대폰 알림이 동작하지 않습니다.** 봇을 만들고 먼저 대화를 시작해야 메시지 전송이 가능하며, 토큰은 외부에 공개하지 마세요.
+## Netlify 운영 대시보드
 
-- LG 오프라인/API 오류, Tuya 제어 실패·회로 차단, 후드 사후 확인 실패, 일일 호출 예산 80% 도달·초과를 감지합니다.
-- 동일 장애 종류는 기본 60분(`ALERT_COOLDOWN_MINUTES`) 간격으로 재알림합니다. Alert 전송 실패는 자동화 원래 결과를 덮지 않습니다.
-- **주의:** Tuya 스마트 플러그 ON/OFF 확인은 후드 팬이 실제로 회전한다는 증거가 아닙니다. 실제 후드 고장 감지에는 전력 사용량 또는 별도 센서가 필요합니다.
-- **주의:** Blobs 기반 중복 억제는 동시 실행 시 정확한 1회 보장이 되지 않습니다.
-- 함수가 실행되지 않는 장애는 함수 자신이 보고할 수 없습니다. 별도 외부 헬스체크가 필요합니다. 자동화가 의도적으로 중단된 상태에서는 장애 알림도 발생하지 않습니다.
+`public/index.html`을 읽기 전용 운영 대시보드로 교체했습니다. `/api/monitor-status`는 `AUTOMATION_ADMIN_TOKEN`을 `x-automation-token` 헤더로 받은 경우에만 상태를 반환합니다. 인증 값이 없으면 503, 일치하지 않으면 401을 반환합니다. 관리자 토큰은 브라우저 메모리에만 두며 저장하지 않습니다.
+
+대시보드 표시 내용:
+- 현재 자동화 활성/중지 및 실행 기록 신선도(활성 상태에서 5분 이상 실행 기록 없으면 STALE)
+- 마지막 실행 시각과 처리 결과
+- LG 인덕션 상태 및 후드 목표 상태/마지막 확인된 플러그 상태
+- Tuya 일일 API 요청 **추정량** (`tuya-api/YYYY-MM-DD` in Blobs)
+- 최근 실행 이력과 장애별 마지막 발생 시각/횟수
+
+`AUTOMATION_ENABLED=false`인 동안에도 스케줄 함수는 `PAUSED` 실행 기록을 남기지만 **LG/Tuya API에는 접근하지 않습니다**. Netlify가 예약 함수를 실행하지 않으면 해당 기록도 갱신되지 않습니다.
+
+중요: 이 대시보드는 기기의 실제 팬 회전 또는 배기 성능을 측정하지 않습니다. `confirmed`는 Tuya 플러그 상태 확인값이며, Google Home의 실시간 기기 상태와 직접 동기화하지 않습니다. Netlify와 Google Home은 별도의 관측 경로입니다.
+
+기존 Telegram 푸시 대신, 장애는 `incidents/<CODE>`에 집계하고 Netlify 함수 로그에 기록합니다. **자동 푸시 알림은 아직 지원하지 않습니다.** 누구나 접근할 수 있는 일반 페이지에 인증 없는 상태 조회 API를 추가하지 마세요.
+
+### 설정
+- `AUTOMATION_ADMIN_TOKEN`: 충분히 긴 임의의 고유 문자열 (Netlify Functions 환경 변수에 등록, Git에 커밋 금지)
+- `AUTOMATION_BLOB_STORE`: site-wide 상태 저장 이름. production과 preview에서 분리해야 합니다
+- `AUTOMATION_ENABLED=false`, `TUYA_COMMANDS_ENABLED=false`: 기본값 유지, 기능 검증 전 활성화 금지
+
+테스트: `npm ci && npm run build && npm test -- --runInBand`.
+
+> 현재 의존성의 `@netlify/blobs` v9는 transactional counter를 제공하지 않습니다. 일일 API 수치는 관찰용이며 병렬 실행 시 정확한 하드캡이 아닙니다. 정확한 사용량 예산 및 분산 락은 트랜잭션 DB/단일 워커로 구현해야 합니다.

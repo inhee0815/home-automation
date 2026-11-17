@@ -17,24 +17,19 @@ export async function reserveTuyaApiAttempt(now = new Date()): Promise<void> {
   const key = 'tuya-api/' + date;
   const store = getStore({ name: process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod', consistency: 'strong' });
 
-  // All external Tuya requests must pass this code. Fail closed on store failures/conflicts.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const entry = await store.getWithMetadata(key, {type: 'json', consistency: 'strong'});
-    const count = entry ? Number((entry.data as DailyUsage).attempts) : 0;
-    if (!Number.isSafeInteger(count) || count < 0) throw new Error('Invalid persisted Tuya usage');
-    if (count >= max) {
-      await notifyIncident('QUOTA_BLOCKED', `오늘 Tuya API 요청 예약 ${count}/${max}회. 추가 호출 차단.`);
-      throw new Error('Tuya daily API request budget exhausted');
-    }
-    const value: DailyUsage = {date, attempts: count + 1, lastAt: now.toISOString()};
-    const written = entry
-      ? await store.setJSON(key, value, { onlyIfMatch: entry.etag })
-      : await store.setJSON(key, value, { onlyIfNew: true });
-    if (written.modified) {
-      console.log(JSON.stringify({event: 'tuya_api_attempt_reserved', date, attempts: value.attempts, limit: max}));
-      if (value.attempts >= Math.ceil(max * 0.8)) await notifyIncident('QUOTA_WARNING', `오늘 Tuya API 요청 예약 ${value.attempts}/${max}회`);
-      return;
-    }
+  // Approximate monitoring only: @netlify/blobs v9 writes are last-write-wins.
+  // Never treat this as a transactional hard cap.
+  const current = await store.get(key, {type: 'json', consistency:'strong'}) as DailyUsage | null;
+  const count = Number(current?.attempts ?? 0);
+  if (!Number.isSafeInteger(count) || count < 0) throw new Error('Invalid persisted Tuya usage');
+  if (count >= max) {
+    await notifyIncident('QUOTA_BLOCKED', `Tuya request budget exhausted: ${count}/${max}`);
+    throw new Error('Tuya daily API request budget exhausted');
   }
-  throw new Error('Tuya request budget update conflict; blocked');
+  const value: DailyUsage = {date, attempts:count+1, lastAt:now.toISOString()};
+  await store.setJSON(key,value);
+  console.log(JSON.stringify({event:'tuya_api_attempt_reserved',date,attempts:value.attempts,limit:max}));
+  if (value.attempts >= Math.ceil(max*0.8)) {
+    await notifyIncident('QUOTA_WARNING', `Tuya request budget nearing limit: ${value.attempts}/${max}`);
+  }
 }

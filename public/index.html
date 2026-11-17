@@ -1,21 +1,78 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LG Induction - Kitchen Hood Automation</title>
-  <style>
-    body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-    .card { background: #1e293b; border-radius: 12px; padding: 2rem; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align: center; max-width: 480px; width: 90%; }
-    h1 { margin-top: 0; color: #38bdf8; font-size: 1.5rem; }
-    code { background: #0f172a; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.9rem; color: #a7f3d0; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>LG Hood Automation API</h1>
-    <p>Serverless service is running locally.</p>
-    <p>API Endpoint: <code>GET /api/health</code></p>
-  </div>
-</body>
-</html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kitchen Hood · Automation Monitor</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif}
+*{box-sizing:border-box}body{background:#0c1220;color:#eaf0fa;margin:0;padding:28px 18px}
+main{max-width:1050px;margin:auto}header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.eyebrow{color:#85a6c0;font-size:12px;letter-spacing:.13em;font-weight:700}h1{font-size:29px;margin:9px 0 5px}p{color:#9eafc4;line-height:1.6}
+.surface{border:1px solid #304058;background:#151f30;border-radius:16px;padding:20px;margin-top:20px}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}input{background:#0b1525;color:white;border:1px solid #40506a;border-radius:8px;padding:12px;min-width:220px;flex:1}
+button{border:0;background:#cee9ff;color:#102338;border-radius:8px;padding:12px 18px;font-weight:700;cursor:pointer}
+button:disabled{opacity:.6}.badge{border:1px solid #58687e;background:#202e40;border-radius:30px;padding:8px 12px;font-weight:700;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:20px 0}
+.tile{background:#172437;border:1px solid #304058;border-radius:14px;padding:18px;min-height:125px}
+.label{color:#92a6bf;font-size:13px}.value{font-size:22px;font-weight:750;margin:17px 0 0;overflow-wrap:anywhere}
+small{color:#92a6bf}h2{font-size:18px;margin:2px 0 14px}
+table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:left;border-bottom:1px solid #304058;font-size:13px;vertical-align:top}th{color:#91a6be;font-weight:500}
+.scroll{overflow-x:auto}.muted{color:#9eafc4}.warning{color:#ffce86}.error{color:#ffadab}.ok{color:#9ae3c1}
+#feedback{min-height:24px;font-size:13px}footer{padding:25px 0;color:#8597ad;font-size:12px}
+@media(max-width:800px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:24px}}
+@media(max-width:420px){.grid{grid-template-columns:1fr}}
+</style></head>
+<body><main>
+<header><div><div class="eyebrow">SWEET HOME · OPERATIONS</div><h1>Kitchen Hood Automation</h1><p>LG ThinQ · Netlify Functions · Tuya Cloud 사용량</p></div><div class="badge" id="overall">인증 필요</div></header>
+<section class="surface"><h2>운영 현황 조회</h2>
+<p>관리자 토큰은 이 화면의 메모리에만 보관하며, 새로고침 시 삭제됩니다. 브라우저에 저장하거나 URL에 포함하지 않습니다.</p>
+<div class="controls"><input id="token" type="password" autocomplete="off" placeholder="관리자 토큰 입력" aria-label="관리자 토큰">
+<button id="refresh">조회</button><button id="clear">지우기</button></div><p id="feedback" aria-live="polite"></p></section>
+<div class="grid">
+ <div class="tile"><div class="label">자동화 상태</div><div class="value" id="mode">—</div><small id="modeSub">조회 전</small></div>
+ <div class="tile"><div class="label">마지막 실행</div><div class="value" id="last">—</div><small id="lastSub">—</small></div>
+ <div class="tile"><div class="label">오늘 Tuya API 요청</div><div class="value" id="quota">—</div><small>추정 사용량 · 실제 청구량 아님</small></div>
+ <div class="tile"><div class="label">후드 제어 결과</div><div class="value" id="hood">—</div><small id="hoodSub">실제 팬 회전 여부는 확인 불가</small></div>
+</div>
+<section class="surface"><h2>기기 및 제어 상태</h2><div class="grid" style="margin-bottom:0">
+ <div><div class="label">인덕션</div><div class="value" id="induction">—</div></div>
+ <div><div class="label">후드 목표</div><div class="value" id="desired">—</div></div>
+ <div><div class="label">마지막 확인</div><div class="value" id="verified">—</div></div>
+ <div><div class="label">제어 실패 횟수</div><div class="value" id="fails">—</div></div>
+</div></section>
+<section class="surface"><h2>장애 이력</h2><div class="scroll"><table><thead><tr><th>장애 종류</th><th>최근 발생</th><th>횟수</th></tr></thead><tbody id="incidents"><tr><td colspan="3" class="muted">조회 전</td></tr></tbody></table></div></section>
+<section class="surface"><h2>최근 실행 내역</h2><div class="scroll"><table><thead><tr><th>시각</th><th>결과</th><th>행동</th><th>인덕션</th><th>후드</th></tr></thead><tbody id="history"><tr><td colspan="5" class="muted">조회 전</td></tr></tbody></table></div></section>
+<footer>읽기 전용 모니터링 화면입니다. 수동 전원 제어는 제공하지 않습니다. 데이터가 없다는 것은 정상 동작의 증거가 아닙니다.</footer>
+</main>
+<script>
+(()=> {
+ const $=id=>document.getElementById(id);
+ let key='';
+ const set=(id,value)=>{$(id).textContent=String(value??'—')};
+ const date=value=>{if(!value)return '—';const d=new Date(value);return Number.isNaN(d.getTime())?'—':d.toLocaleString('ko-KR')};
+ const empty=(el,span)=>{el.replaceChildren();const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=span;td.textContent='기록 없음';tr.append(td);el.append(tr)};
+ const rows=(id,items,keys)=>{const root=$(id);root.replaceChildren();if(!items.length){empty(root,keys.length);return}
+   for(const item of items){const tr=document.createElement('tr');for(const fn of keys){const td=document.createElement('td');td.textContent=String(fn(item)??'—');tr.append(td)}root.append(tr)}};
+ const clear=()=>{key='';$('token').value='';set('feedback','관리자 토큰을 지웠습니다.')};
+ $('clear').onclick=clear;
+ $('refresh').onclick=async()=>{
+  const provided=$('token').value.trim();if(provided)key=provided;
+  if(!key){set('feedback','관리자 토큰을 입력하세요.');return}
+  $('refresh').disabled=true;set('feedback','운영 상태를 조회하고 있습니다.');
+  try{
+   const res=await fetch('/api/monitor-status',{headers:{'x-automation-token':key},cache:'no-store'});
+   const data=await res.json();if(!res.ok)throw new Error(data.error||('HTTP '+res.status));
+   set('overall',data.status);set('mode',data.status);set('modeSub',data.commandsEnabled?'제어 허용':'명령 차단');
+   set('last',data.latestRun?date(data.latestRun.time):'기록 없음');set('lastSub',data.latestRun?.action||'실행 기록 없음');
+   set('quota',data.tuya.attempts+' / '+data.tuya.limit);
+   set('hood',data.hood?.confirmed||'UNKNOWN');set('hoodSub','확인된 플러그 상태 추정치 (실제 후드 작동 미검증)');
+   set('induction',data.hood?.induction||'UNKNOWN');set('desired',data.hood?.desired||'UNKNOWN');
+   set('verified',date(data.hood?.lastVerifiedAt));set('fails',data.hood?.failureCount??'—');
+   rows('incidents',data.incidents,[x=>x.code,x=>date(x.lastSeenAt),x=>x.count]);
+   rows('history',data.history,[x=>date(x.time),x=>x.outcome,x=>x.action,x=>x.induction,x=>x.hood]);
+   set('feedback','조회 완료 · 서버 기준 '+date(data.serverTime));
+  }catch(e){set('overall','조회 실패');set('feedback',e.message)}
+  finally{$('refresh').disabled=false;$('token').value=''}
+ };
+})();
+</script></body></html>
