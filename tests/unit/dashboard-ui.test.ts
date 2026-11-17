@@ -30,3 +30,15 @@ test('manual live test buttons are enabled only after authenticated eligibility'
  expect(html).toContain("$('testStatus').disabled=!data.manualLiveTestEnabled");
  expect(html).toContain("if(action!=='status' && !confirm");
 });
+
+test('token persists only after authenticated success when user opts in',()=>{
+ expect(html).toContain("const REMEMBER_KEY='hood_dashboard_remembered_token'");
+ expect(html).toContain("const SESSION_KEY='hood_dashboard_session_token'");
+ expect(html).toContain("if($('remember').checked)");
+ expect(html).toContain("storageSet(localStorage,REMEMBER_KEY,key)");
+ expect(html).toContain("storageSet(sessionStorage,SESSION_KEY,key)");
+});
+test('logout clears persistent and session tokens',()=>{
+ expect(html).toContain("storageRemove(localStorage,REMEMBER_KEY);storageRemove(sessionStorage,SESSION_KEY)");
+ expect(html).toContain("if(key)$('refresh').click()");
+});
