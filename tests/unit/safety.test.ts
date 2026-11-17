@@ -1,11 +1,14 @@
 import { AutomationEngine } from '../../src/automation/engine';
 import { HoodState } from '../../src/automation/stateStore';
 import { sendDirectPlugCommand } from '../../src/tuya/directCommand';
+import { runtimeEnabled } from '../../src/automation/runtimeSwitch';
+jest.mock('../../src/automation/runtimeSwitch',()=>({runtimeEnabled:jest.fn()}));
 jest.mock('../../src/tuya/directCommand', () => ({sendDirectPlugCommand: jest.fn()}));
 const command = sendDirectPlugCommand as jest.Mock;
 const state: HoodState = {induction:'ON',desired:'ON',confirmed:'ON',offDetectedAt:null,lastCommandAt:null,lastVerifiedAt:1000,failureCount:0,nextRetryAt:0,updatedAt:1000};
 beforeEach(() => {
   jest.clearAllMocks();
+  (runtimeEnabled as jest.Mock).mockResolvedValue(true);
   process.env.AUTOMATION_ENABLED='true';
   process.env.TUYA_COMMANDS_ENABLED='true';
 });

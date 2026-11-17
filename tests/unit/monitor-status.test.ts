@@ -1,6 +1,8 @@
 jest.mock('@netlify/blobs', () => ({ getStore: jest.fn() }));
 import { getStore } from '@netlify/blobs';
 import { handler } from '../../netlify/functions/monitor-status';
+import { runtimeEnabled,mayArmFromDashboard } from '../../src/automation/runtimeSwitch';
+jest.mock('../../src/automation/runtimeSwitch',()=>({runtimeEnabled:jest.fn(),mayArmFromDashboard:jest.fn()}));
 const store = { get: jest.fn(), list: jest.fn() };
 async function request(token?: string) {
   return await handler!({
@@ -10,6 +12,8 @@ async function request(token?: string) {
 }
 beforeEach(() => {
   jest.clearAllMocks();
+  (runtimeEnabled as jest.Mock).mockResolvedValue(false);
+  (mayArmFromDashboard as jest.Mock).mockReturnValue(false);
   (getStore as jest.Mock).mockReturnValue(store);
   process.env.AUTOMATION_ADMIN_TOKEN = 'test-admin';
   delete process.env.AUTOMATION_ENABLED;
@@ -59,6 +63,7 @@ test('unavailable store does not masquerade as zero Tuya calls', async () => {
 });
 test('an active automation with a failed monitor read is degraded', async () => {
   process.env.AUTOMATION_ENABLED = 'true';
+  (runtimeEnabled as jest.Mock).mockResolvedValue(true);
   store.list.mockRejectedValue(new Error('Cannot list'));
   const response = await request('test-admin');
   expect(JSON.parse(response.body).status).toBe('DEGRADED');

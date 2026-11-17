@@ -2,11 +2,12 @@ import { schedule } from '@netlify/functions';
 import { AutomationEngine } from '../../src/automation/engine';
 import { notifyAutomationResult, notifyIncident } from '../../src/automation/notification';
 import { recordRun } from '../../src/automation/monitor';
+import { runtimeEnabled } from '../../src/automation/runtimeSwitch';
 
 export const rawHandler = async () => {
-  if (process.env.AUTOMATION_ENABLED !== 'true') {
+  if (!(await runtimeEnabled())) {
     await recordRun('PAUSED');
-    return {statusCode:200,body:JSON.stringify({ok:true,skipped:true,reason:'AUTOMATION_ENABLED is not true'})};
+    return {statusCode:200,body:JSON.stringify({ok:true,skipped:true,reason:'Automation safety interlock is off'})};
   }
   try {
     const result = await new AutomationEngine().evaluateAndExecute();

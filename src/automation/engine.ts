@@ -4,6 +4,7 @@ import { sendDirectPlugCommand } from '../tuya/directCommand';
 import { BlobStateRepository, HoodState, Power, StateRepository } from './stateStore';
 import { AutomationResult } from './types';
 import { notifyIncident } from './notification';
+import { runtimeEnabled } from './runtimeSwitch';
 
 export const SHUTDOWN_DELAY_MS = Math.max(0, Number(process.env.SHUTDOWN_DELAY_SECONDS ?? 90)) * 1000;
 const retryMs = () => Math.max(60, Number(process.env.CONTROL_RETRY_SECONDS ?? 300)) * 1000;
@@ -24,7 +25,7 @@ export class AutomationEngine {
     ): AutomationResult => ({ action, inductionState, hoodState, changed, remainingDelaySeconds, message, evaluatedAt });
 
     // Default disabled: no external network calls, and no writes to Blobs.
-    if (process.env.AUTOMATION_ENABLED !== 'true')
+    if (!(await runtimeEnabled()))
       return result('SKIPPED_TUYA_ERROR', 'UNKNOWN', 'UNKNOWN', 'Automation is disabled.');
 
     let lg;
@@ -120,6 +121,7 @@ export class AutomationEngine {
           return result(target === 'ON' ? 'ALREADY_ON' : 'ALREADY_OFF', induction, target, 'Periodic verification matched.');
         }
       }
+      if (!(await runtimeEnabled())) return result('SKIPPED_TUYA_ERROR', induction, next.confirmed, 'Runtime interlock is off.');
       await sendDirectPlugCommand(target === 'ON');
       next.confirmed = 'UNKNOWN'; // Accepted != physically confirmed.
       next.lastCommandAt = now;
