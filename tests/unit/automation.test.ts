@@ -52,7 +52,7 @@ test('OFF is delayed from first OFF detection', async () => {
   const s = setup(off, baseline({induction: 'ON', desired: 'ON', confirmed: 'ON', offDetectedAt: null}));
   const r = await s.engine.evaluateAndExecute(100000);
   expect(r.action).toBe('WAITING_SHUTDOWN_DELAY');
-  expect(r.remainingDelaySeconds).toBe(90);
+  expect(r.remainingDelaySeconds).toBe(30);
   expect(command).not.toHaveBeenCalled();
 });
 test('first execution initializes only', async () => {
@@ -178,5 +178,17 @@ test('cached OFF rechecks after 3 minutes when shutdown recently detected',async
  const s=setup(off,baseline({induction:'OFF',desired:'OFF',confirmed:'OFF',offDetectedAt:100000,lastVerifiedAt:120000}));
  (s.tuya.getStatus as jest.Mock).mockResolvedValue({online:true,switch_1:true});
  expect((await s.engine.evaluateAndExecute(320001)).action).toBe('TURN_OFF');
+ expect(command).toHaveBeenCalledWith(false);
+});
+
+test('30-second OFF grace expires at next minute tick',async()=>{
+ const s=setup(off, baseline({induction:'OFF',desired:'ON',confirmed:'ON',offDetectedAt:100000}));
+ (s.tuya.getStatus as jest.Mock).mockResolvedValue({online:true,switch_1:true});
+ const a=await s.engine.evaluateAndExecute(120000);
+ expect(a.action).toBe('WAITING_SHUTDOWN_DELAY');
+ expect(a.remainingDelaySeconds).toBe(10);
+ expect(command).not.toHaveBeenCalled();
+ const b=await s.engine.evaluateAndExecute(180000);
+ expect(b.action).toBe('TURN_OFF');
  expect(command).toHaveBeenCalledWith(false);
 });

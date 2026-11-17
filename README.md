@@ -208,3 +208,7 @@ At the operator's explicit request the hard-coded `return false` in `deploymentA
 ## Production automation re-enable (2026-11-17)
 
 Verified Netlify production `AUTOMATION_ENABLED=true` after identifying production had been configured `false`. This documentation-only commit triggers the next production deployment to load the corrected environment. The Tuya failure circuit breaker and verified manual reset continue to apply; deployment readiness does not guarantee physical hood operation.
+
+## OFF delay setting (November 17, 2026)
+
+Production `SHUTDOWN_DELAY_SECONDS=30` (default also 30). The Netlify cron still executes every minute, so actual OFF command can be issued approximately 60–120 seconds after the physical induction is switched off when all LG/Tuya calls succeed (first OFF detection up to 60 seconds later, then following minute). Changing delay does **not** change cron frequency, Tuya periodic verification, quota guard or API usage per steady-state tick. More brief OFF cycles lasting between 30 and 90 seconds may trigger a Tuya OFF command compared to the old 90-second grace.
