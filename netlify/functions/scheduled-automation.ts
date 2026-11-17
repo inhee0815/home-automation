@@ -4,13 +4,27 @@ import { AutomationEngine } from '../../src/automation/engine';
 import { notifyAutomationResult, notifyIncident } from '../../src/automation/notification';
 import { recordRun, verifyRecordedRunReadback } from '../../src/automation/monitor';
 import { runtimeEnabled } from '../../src/automation/runtimeSwitch';
+import { LgThinQClient } from '../../src/lg/client';
+import { getStore } from '@netlify/blobs';
 
 export const rawHandler = async (event?: Parameters<Parameters<typeof schedule>[1]>[0]) => {
   // Lambda compatibility handlers need Blobs metadata initialized per invocation.
   if (event) connectLambda(event as unknown as Parameters<typeof connectLambda>[0]);
 
   if (!(await runtimeEnabled())) {
-    // Read the previous heartbeat before writing a new one; no additional vendor API calls.
+    // Separate observation-only phase: LG state is read but never commands Tuya.
+    if (process.env.LG_OBSERVE_ONLY === 'true') {
+      try {
+        const lg = await new LgThinQClient().getCooktopStatus();
+        const state = !lg.online ? 'UNKNOWN' : lg.powerState;
+        await getStore({name:process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod',consistency:'eventual'})
+          .setJSON('monitor/lg-observed',{time:new Date().toISOString(),powerState:state,online:lg.online});
+        console.log(JSON.stringify({event:'lg_observed_no_tuya',powerState:state}));
+      } catch (error) {
+        console.error(JSON.stringify({event:'lg_observation_failed',errorType:error instanceof Error?error.name:'UnknownError'}));
+      }
+    }
+    // Read the previous heartbeat before writing a new one; no Tuya API calls.
     await verifyRecordedRunReadback();
     const monitorRecorded = await recordRun('PAUSED');
     return {statusCode:200,body:JSON.stringify({ok:true,skipped:true,monitorRecorded,reason:'Automation safety interlock is off'})};

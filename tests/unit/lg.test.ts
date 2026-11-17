@@ -103,6 +103,12 @@ describe('LG ThinQ Client & API Endpoints', () => {
       );
     });
 
+    it('should fail closed as UNKNOWN for unrecognized payload', () => {
+      const client = new LgThinQClient(dummyConfig);
+      expect(client.parseCooktopStatus('device',{online:true,state:{strange:'anything'}}).powerState).toBe('UNKNOWN');
+      expect(client.parseCooktopStatus('device',{online:true}).powerState).toBe('UNKNOWN');
+    });
+
     it('should detect stopped state when all burners are OFF', () => {
       const client = new LgThinQClient(dummyConfig);
 

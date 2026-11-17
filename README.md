@@ -179,3 +179,19 @@ Blobs 저장 검증: Function 로그에서 `monitoring_write_success`를 확인�
 Postgres/Supabase 데이터베이스 **사용하지 않음**. 환경 변수 `LIVE_TEST_ENABLED=true`, `MANUAL_AUTOMATION_ENABLED=true`, `TUYA_COMMANDS_ENABLED=true`, `TUYA_QUOTA_GUARD_ENABLED=true` 설정 후 새 운영 배포에서 관리자 토큰으로 /api/tuya-status (GET), /api/tuya-control (POST) 호출 가능. `TUYA_DAILY_API_LIMIT=8` (허용 범위 1~8)이며 Blobs에 기록되는 카운터는 **동시 호출/다중 인스턴스에서 원자적이지 않음**. 엄격한 한도는 보장되지 않으므로 테스트 요청은 순차적으로 수동으로만 실행해야 합니다. 자동 스케줄 및 엔진은 본 테스트 단계에서 **항상 PAUSED**. 브라우저에서 인증 없는 제어 허용 없음.
 
 실기기 테스트 전 Tuya Trial 잔여량을 공식 콘솔에서 확인하고, 플러그 ON/OFF가 물리적으로 후드를 동작시키는지 현장에서 확인하세요. 토큰 요청, 조회, 명령 등은 각각 Tuya API 예산을 사용합니다. 명령 수락은 물리적 팬 작동 확인이 아닙니다.
+
+## 2026-11-17: LG 관찰 단계 및 변경 시 호출 설계
+
+자동 제어는 여전히 **코드에서 완전히 잠김**(`deploymentAllowsRun() === false`).
+`LG_OBSERVE_ONLY=true`로 재배포하면 매분 LG ThinQ 인덕션 상태만 조회하고 `monitor/lg-observed`에 `ON/OFF/UNKNOWN` 및 시각을 저장합니다. 어떤 Tuya API도 호출하지 않고 자동 후드 전원을 바꾸지 않습니다. 이 설정은 현재 자동으로 추가하지 않았습니다.
+
+LG 상태 파서는 알려진 상태 및 버너 전력 신호가 없으면 **UNKNOWN**을 반환하도록 수정했습니다. 알 수 없는 값을 OFF로 간주하면 후드가 잘못 꺼질 수 있으므로 실제 ON/OFF 응답을 확인하기 전에는 자동 제어를 열지 않습니다.
+
+추후 자동화 설계:
+- 매분 LG 조회 → UNKNOWN/오프라인이면 후드 변경 없음
+- 최초 실행은 기준 상태 저장 및 최초 1회 Tuya 상태 조회 (할당량 소모)
+- OFF→ON은 후드 목표 ON; ON→OFF는 90초 OFF 감지 지속 시에만 후드 목표 OFF
+- 목표와 직전 확인된 상태가 같으면 Tuya **API 조회·명령을 생략**
+- 명령 후에는 수락 응답만으로 성공을 단정하지 않으며 지연 후 Tuya 상태 검증 1회
+- 장애 시 재시도 간격 및 실패 누적 차단
+- Blobs 비원자적 read-modify-write를 사용하므로 **함수 중복 실행 시 완벽한 단 한 번의 명령/엄격한 API 상한은 보장할 수 없음**. Trial 잔여 한도와 물리 후드 ON/OFF 실증 전 자동화 활성화 금지.
