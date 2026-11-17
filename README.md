@@ -204,3 +204,7 @@ At the operator's explicit request the hard-coded `return false` in `deploymentA
 - Removed the fixed 8-call local ceiling. Default local daily budget is 100 attempts; configurable via TUYA_DAILY_API_LIMIT (1–1000). This is not a provider-granted API quota or a strict concurrency-safe cap; Netlify Blobs may lose increments under concurrent requests.
 - A newly required ON state after an OFF cooldown first verifies Tuya plug status. If plug is OFF, the prior OFF cooldown is cleared and ON is sent; if already ON, no command; if status cannot be verified, command remains blocked.
 - Same-target retries, failure circuit breaker and 90-second OFF delay are retained. Device operation must be physically verified.
+
+## Production automation re-enable (2026-11-17)
+
+Verified Netlify production `AUTOMATION_ENABLED=true` after identifying production had been configured `false`. This documentation-only commit triggers the next production deployment to load the corrected environment. The Tuya failure circuit breaker and verified manual reset continue to apply; deployment readiness does not guarantee physical hood operation.
