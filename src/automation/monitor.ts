@@ -8,6 +8,8 @@ export interface RunRecord {
   action: string;
   induction: string;
   hood: string;
+  message?: string;
+  changed?: boolean;
 }
 function store() {
   return getStore({name:process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod',consistency:'eventual'});
@@ -17,12 +19,13 @@ export async function recordRun(outcome: MonitorOutcome, result?: AutomationResu
   const entry: RunRecord = {
     time:now.toISOString(),outcome,action:result?.action || outcome,
     induction:result?.inductionState || 'UNKNOWN',hood:result?.hoodState || 'UNKNOWN',
+    message: result?.message,changed: result?.changed ?? false,
   };
   try {
     const s = store();
     await s.setJSON('monitor/latest',entry);
     // Each run has a unique history entry. Retain meaningful events and periodic heartbeats.
-    if (outcome !== 'OK' || now.getUTCMinutes()%15 === 0) {
+    if (outcome !== 'OK' || result?.changed || (result && !['ALREADY_ON','ALREADY_OFF','WAITING_SHUTDOWN_DELAY'].includes(result.action)) || now.getUTCMinutes()%15 === 0) {
       await s.setJSON('monitor/runs/'+now.toISOString()+'-'+Math.random().toString(36).slice(2,8),entry);
     }
     console.log(JSON.stringify({event:'monitoring_write_success',outcome,time:entry.time}));

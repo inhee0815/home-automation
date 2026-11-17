@@ -34,6 +34,7 @@ export const rawHandler = async (event?: Parameters<Parameters<typeof schedule>[
     const monitorRecorded = await recordRun(result.action.startsWith('SKIPPED_') ? 'ERROR' : 'OK', result);
     await notifyAutomationResult(result);
     console.log(JSON.stringify({event:'hood_automation',...result}));
+    console.log(JSON.stringify({event:'hood_automation_diagnostic',action:result.action,induction:result.inductionState,hood:result.hoodState,changed:result.changed,reason:result.message}));
     return {statusCode:200,body:JSON.stringify({ok:true,data:result,monitorRecorded})};
   } catch {
     await recordRun('ERROR');
