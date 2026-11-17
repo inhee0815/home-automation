@@ -24,7 +24,7 @@ function authorized(input?: string): boolean {
 }
 
 export const handler: Handler = async (event) => {
-  connectLambda(event);
+  connectLambda(event as unknown as Parameters<typeof connectLambda>[0]);
   if (event.httpMethod !== 'GET')
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
   if (!process.env.AUTOMATION_ADMIN_TOKEN)

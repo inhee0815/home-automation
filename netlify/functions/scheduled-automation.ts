@@ -7,7 +7,7 @@ import { runtimeEnabled } from '../../src/automation/runtimeSwitch';
 
 export const rawHandler = async (event?: Parameters<Parameters<typeof schedule>[1]>[0]) => {
   // Lambda compatibility handlers need Blobs metadata initialized per invocation.
-  if (event) connectLambda(event);
+  if (event) connectLambda(event as unknown as Parameters<typeof connectLambda>[0]);
 
   if (!(await runtimeEnabled())) {
     await recordRun('PAUSED');

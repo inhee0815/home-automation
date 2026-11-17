@@ -4,7 +4,7 @@ import { AutomationEngine } from '../../src/automation/engine';
 import { runtimeEnabled } from '../../src/automation/runtimeSwitch';
 
 export const handler: Handler = async (event) => {
-  connectLambda(event);
+  connectLambda(event as unknown as Parameters<typeof connectLambda>[0]);
   if (event.httpMethod !== 'POST') return {statusCode: 405, body: 'Method Not Allowed'};
   if (process.env.AUTOMATION_ENABLED !== 'true' || process.env.MANUAL_AUTOMATION_ENABLED !== 'true')
     return {statusCode: 403, body: 'Automation disabled'};
