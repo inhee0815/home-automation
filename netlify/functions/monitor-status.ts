@@ -39,7 +39,7 @@ export const handler: Handler = async (event) => {
   try {
     store = getStore({
       name: process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod',
-      consistency: 'strong',
+      consistency: 'eventual',
     });
   } catch {
     warnings.push('BLOBS_STORE_UNAVAILABLE');
@@ -62,15 +62,15 @@ export const handler: Handler = async (event) => {
   const s = store;
   const [run, hood, usage, incidents, historyKeys] = await Promise.all([
     safely<RunRecord | null>('LATEST_RUN_UNAVAILABLE',
-      async () => await s!.get('monitor/latest', { type: 'json', consistency: 'strong' }) as RunRecord | null, null),
+      async () => await s!.get('monitor/latest', { type: 'json', consistency: 'eventual' }) as RunRecord | null, null),
     safely<HoodState | null>('HOOD_STATE_UNAVAILABLE',
-      async () => await s!.get('hood-state', { type: 'json', consistency: 'strong' }) as HoodState | null, null),
+      async () => await s!.get('hood-state', { type: 'json', consistency: 'eventual' }) as HoodState | null, null),
     safely<{ attempts: number } | null>('TUYA_USAGE_UNAVAILABLE',
-      async () => await s!.get('tuya-api/' + today, { type: 'json', consistency: 'strong' }) as { attempts: number } | null, null),
+      async () => await s!.get('tuya-api/' + today, { type: 'json', consistency: 'eventual' }) as { attempts: number } | null, null),
     Promise.all(incidentCodes.map(async code => {
       const value = await safely<Record<string, unknown> | null>(
         'INCIDENT_' + code + '_UNAVAILABLE',
-        async () => await s!.get('incidents/' + code, { type: 'json', consistency: 'strong' }) as Record<string, unknown> | null,
+        async () => await s!.get('incidents/' + code, { type: 'json', consistency: 'eventual' }) as Record<string, unknown> | null,
         null,
       );
       return value ? { code, ...value } : null;
@@ -81,7 +81,7 @@ export const handler: Handler = async (event) => {
 
   const history = await Promise.all(historyKeys.sort().reverse().slice(0, 20).map(key =>
     safely<RunRecord | null>('HISTORY_ENTRY_UNAVAILABLE',
-      async () => await s!.get(key, { type: 'json', consistency: 'strong' }) as RunRecord | null,
+      async () => await s!.get(key, { type: 'json', consistency: 'eventual' }) as RunRecord | null,
       null),
   ));
   const stale = active && (!run || !Number.isFinite(Date.parse(run.time)) || Date.now() - Date.parse(run.time) > 5 * 60_000);

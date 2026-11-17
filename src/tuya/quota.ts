@@ -15,11 +15,11 @@ export async function reserveTuyaApiAttempt(now = new Date()): Promise<void> {
     throw new Error('Invalid TUYA_DAILY_API_LIMIT');
   const date = now.toISOString().slice(0, 10);
   const key = 'tuya-api/' + date;
-  const store = getStore({ name: process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod', consistency: 'strong' });
+  const store = getStore({ name: process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod', consistency: 'eventual' });
 
   // Approximate monitoring only: @netlify/blobs v9 writes are last-write-wins.
   // Never treat this as a transactional hard cap.
-  const current = await store.get(key, {type: 'json', consistency:'strong'}) as DailyUsage | null;
+  const current = await store.get(key, {type: 'json', consistency:'eventual'}) as DailyUsage | null;
   const count = Number(current?.attempts ?? 0);
   if (!Number.isSafeInteger(count) || count < 0) throw new Error('Invalid persisted Tuya usage');
   if (count >= max) {

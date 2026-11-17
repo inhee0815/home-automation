@@ -10,7 +10,7 @@ export interface RunRecord {
   hood: string;
 }
 function store() {
-  return getStore({name:process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod',consistency:'strong'});
+  return getStore({name:process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod',consistency:'eventual'});
 }
 export async function recordRun(outcome: MonitorOutcome, result?: AutomationResult): Promise<void> {
   const now = new Date();

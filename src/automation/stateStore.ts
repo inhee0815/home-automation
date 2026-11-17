@@ -20,11 +20,11 @@ export class BlobStateRepository implements StateRepository {
   private store() {
     return getStore({
       name: process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod',
-      consistency: 'strong',
+      consistency: 'eventual',
     });
   }
   async load(): Promise<HoodState | null> {
-    return await this.store().get('hood-state', { type: 'json', consistency: 'strong' }) as HoodState | null;
+    return await this.store().get('hood-state', { type: 'json', consistency: 'eventual' }) as HoodState | null;
   }
   async save(value: HoodState): Promise<void> {
     await this.store().setJSON('hood-state', value);

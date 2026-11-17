@@ -19,9 +19,9 @@ export async function notifyIncident(code: AlertCode, detail: string, now = Date
   // Write failures must not obstruct the original automation decision.
   const safe = detail.slice(0,240);
   try {
-    const store = getStore({name: process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod',consistency:'strong'});
+    const store = getStore({name: process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod',consistency:'eventual'});
     const key = 'incidents/' + code;
-    const previous = await store.get(key, {type:'json',consistency:'strong'}) as {lastLoggedAt:number;count:number}|null;
+    const previous = await store.get(key, {type:'json',consistency:'eventual'}) as {lastLoggedAt:number;count:number}|null;
     const cooldown = Math.max(5,Number(process.env.ALERT_COOLDOWN_MINUTES ?? 60))*60000;
     const emit = !previous || now-previous.lastLoggedAt >= cooldown;
     await store.setJSON(key,{lastSeenAt:now,lastLoggedAt:emit?now:previous!.lastLoggedAt,count:(previous?.count ?? 0)+1,detail:safe});

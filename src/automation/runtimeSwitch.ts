@@ -13,10 +13,12 @@ function logBlobFailure(operation: string, error: unknown): void {
 
 const store = () => getStore({
   name: process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod',
-  consistency: 'strong',
+  consistency: 'eventual',
 });
+// Runtime OFF changes need immediate visibility, which current Blobs deployment cannot guarantee.
+// Never allow device control using an eventually-consistent mutable ON/OFF record.
 export function deploymentAllowsRun(): boolean {
-  return process.env.AUTOMATION_ENABLED === 'true'
+  return false && process.env.AUTOMATION_ENABLED === 'true'
     && process.env.TUYA_COMMANDS_ENABLED === 'true'
     && process.env.TUYA_QUOTA_GUARD_ENABLED === 'true';
 }
@@ -32,7 +34,7 @@ function isProductionRequest(host?: string): boolean {
     && host?.toLowerCase() === PRODUCTION_HOST;
 }
 export function armingBlockers(host?: string): string[] {
-  const blockers: string[] = [];
+  const blockers: string[] = ['RUNTIME_INTERLOCK_STRONG_CONSISTENCY_UNAVAILABLE'];
   if (process.env.AUTOMATION_ENABLED !== 'true') blockers.push('AUTOMATION_DISABLED');
   if (process.env.TUYA_COMMANDS_ENABLED !== 'true') blockers.push('TUYA_COMMANDS_DISABLED');
   if (process.env.TUYA_QUOTA_GUARD_ENABLED !== 'true') blockers.push('QUOTA_GUARD_DISABLED');
@@ -47,7 +49,7 @@ export async function runtimeEnabled(): Promise<boolean> {
   // Never read LG / Tuya when a deployment-level guard is off.
   if (!deploymentAllowsRun()) return false;
   try {
-    const state = await store().get('control/runtime-switch', {type:'json',consistency:'strong'}) as RuntimeSwitch | null;
+    const state = await store().get('control/runtime-switch', {type:'json',consistency:'eventual'}) as RuntimeSwitch | null;
     return state?.enabled === true;
   } catch (error) {
     logBlobFailure('runtime_switch_read',error);

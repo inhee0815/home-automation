@@ -1,6 +1,6 @@
 jest.mock('@netlify/blobs',()=>({getStore:jest.fn(),connectLambda:jest.fn()}));
 import {getStore} from '@netlify/blobs';
-import {runtimeEnabled,setRuntimeSwitch,mayArmFromDashboard} from '../../src/automation/runtimeSwitch';
+import {runtimeEnabled,setRuntimeSwitch,mayArmFromDashboard,armingBlockers} from '../../src/automation/runtimeSwitch';
 import {handler} from '../../netlify/functions/automation-switch';
 const store={get:jest.fn(),setJSON:jest.fn()};
 const request=(enabled:boolean,token='admin',host='sweethome-automation.netlify.app')=>handler!({httpMethod:'POST',headers:{'x-automation-token':token,host},body:JSON.stringify({enabled})} as any,{} as any) as any;
@@ -37,12 +37,13 @@ test('bad token cannot change runtime state',async()=>{
  expect(response.statusCode).toBe(401);
  expect(store.setJSON).not.toHaveBeenCalled();
 });
-test('permitted ON must read back true',async()=>{
+test('ON is blocked when runtime switch lacks strong consistency',async()=>{
  Object.assign(process.env,{AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',ENABLE_DASHBOARD_ARMING:'true',SITE_ID:'178acf14-19c5-40c9-b50e-3a11162a0412',URL:'https://sweethome-automation.netlify.app'});
- expect(mayArmFromDashboard('sweethome-automation.netlify.app')).toBe(true);
- store.get.mockResolvedValue({enabled:true});
+ expect(mayArmFromDashboard('sweethome-automation.netlify.app')).toBe(false);
+ expect(armingBlockers('sweethome-automation.netlify.app')).toContain('RUNTIME_INTERLOCK_STRONG_CONSISTENCY_UNAVAILABLE');
  const response=await request(true);
- expect(response.statusCode).toBe(200);
+ expect(response.statusCode).toBe(409);
+ expect(store.setJSON).not.toHaveBeenCalled();
 });
 
 test('preview host cannot arm even with production site env',async()=>{
