@@ -134,3 +134,11 @@ Netlify Functions 런타임에서 `CONTEXT`는 문서상 보장되지 않습니�
 All existing named `handler` functions use the Lambda compatibility format, which does **not** automatically connect Netlify Blobs. Each function needing Blobs now invokes `connectLambda(event)` before accessing `getStore()`. The scheduled function initializes it at the start of each invocation. The runtime switch stays fail-closed until a valid persisted ON state exists.
 
 The diagnostic logs now emit only error class and operation, never tokens or provider error messages. After deploying, inspect `scheduled-automation` logs for `netlify_blobs_error` and check whether the dashboard displays valid monitoring history. Do not arm automation until this succeeds and the Tuya trial quota is verified.
+
+### 2026-11-17 BlobsConsistencyError 대응
+
+Netlify Blobs의 `strong` 읽기는 Functions 런타임에서 `uncachedEdgeURL`이 제공되지 않아 `BlobsConsistencyError`가 발생했습니다. 모니터링 기록, 장애 기록, 상태 관측 저장소는 `eventual` 모드로 전환했습니다. 값 갱신의 전파에는 최대 60초가 걸릴 수 있습니다.
+
+**자동화 ON은 코드 레벨에서 잠겨 있습니다.** 변경된 OFF 스위치가 모든 인스턴스에 즉시 반영된다는 보장이 없고, Tuya API 일일 시도 횟수 역시 Blobs의 read-modify-write 방식이므로 동시 호출 시 엄격히 제한할 수 없습니다. 이 프로젝트는 운영자 승인 여부와 관계없이 실제 LG/Tuya 제어를 시작하지 않습니다. 즉시 중단·호출량 엄격한 제한이 필요한 경우 트랜잭션 기반 저장소와 단일 실행 경로로 교체해야 합니다.
+
+관리자 대시보드에서는 `RUNTIME_INTERLOCK_STRONG_CONSISTENCY_UNAVAILABLE`을 ON 차단 사유로 표시합니다. OFF 요청은 저장만 수행하며 기기 플러그를 직접 변경하지 않습니다.
