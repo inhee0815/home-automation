@@ -1,6 +1,6 @@
 jest.mock('@netlify/blobs',()=>({getStore:jest.fn(),connectLambda:jest.fn()}));
 import {getStore} from '@netlify/blobs';
-import {runtimeEnabled,setRuntimeSwitch,mayArmFromDashboard,armingBlockers} from '../../src/automation/runtimeSwitch';
+import {runtimeEnabled,setRuntimeSwitch,mayArmFromDashboard,armingBlockers,manualLiveTestEnabled} from '../../src/automation/runtimeSwitch';
 import {handler} from '../../netlify/functions/automation-switch';
 const store={get:jest.fn(),setJSON:jest.fn()};
 const request=(enabled:boolean,token='admin',host='sweethome-automation.netlify.app')=>handler!({httpMethod:'POST',headers:{'x-automation-token':token,host},body:JSON.stringify({enabled})} as any,{} as any) as any;
@@ -10,7 +10,7 @@ beforeEach(()=>{
  process.env.AUTOMATION_ADMIN_TOKEN='admin';
  delete process.env.AUTOMATION_ENABLED;delete process.env.TUYA_COMMANDS_ENABLED;delete process.env.TUYA_QUOTA_GUARD_ENABLED;
  delete process.env.ENABLE_DASHBOARD_ARMING;delete process.env.CONTEXT;delete process.env.SITE_ID;delete process.env.URL;
- delete process.env.AUTOMATION_CONTROL_MODE;delete process.env.AUTOMATION_RESTART_APPROVED;delete process.env.TUYA_TRIAL_QUOTA_VERIFIED;delete process.env.TUYA_QUOTA_BACKEND;delete process.env.TUYA_QUOTA_DB_URL;delete process.env.TUYA_QUOTA_DB_SERVICE_ROLE_KEY;
+ delete process.env.AUTOMATION_CONTROL_MODE;delete process.env.AUTOMATION_RESTART_APPROVED;delete process.env.TUYA_TRIAL_QUOTA_VERIFIED;delete process.env.LIVE_TEST_ENABLED;delete process.env.MANUAL_AUTOMATION_ENABLED;
 });
 test('absent runtime state fails closed',async()=>{
  process.env.AUTOMATION_ENABLED='true';process.env.TUYA_COMMANDS_ENABLED='true';process.env.TUYA_QUOTA_GUARD_ENABLED='true';
@@ -41,7 +41,7 @@ test('bad token cannot change runtime state',async()=>{
 test('dashboard ON is blocked in deploy-only control mode',async()=>{
  Object.assign(process.env,{AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',ENABLE_DASHBOARD_ARMING:'true',SITE_ID:'178acf14-19c5-40c9-b50e-3a11162a0412',URL:'https://sweethome-automation.netlify.app'});
  expect(mayArmFromDashboard('sweethome-automation.netlify.app')).toBe(false);
- expect(armingBlockers('sweethome-automation.netlify.app')).toContain('DASHBOARD_ON_UNSUPPORTED_USE_DEPLOY_CONTROL');
+ expect(armingBlockers('sweethome-automation.netlify.app')).toContain('SCHEDULED_AUTOMATION_DISABLED_DURING_LIVE_TEST');
  const response=await request(true);
  expect(response.statusCode).toBe(409);
  expect(store.setJSON).not.toHaveBeenCalled();
@@ -55,25 +55,9 @@ test('preview host cannot arm even with production site env',async()=>{
  expect(store.setJSON).not.toHaveBeenCalled();
 });
 
-test('deploy-only explicit review enables runtime without Blob read', async()=>{
- Object.assign(process.env,{AUTOMATION_CONTROL_MODE:'deploy',AUTOMATION_RESTART_APPROVED:'true',TUYA_TRIAL_QUOTA_VERIFIED:'true',AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',TUYA_DAILY_API_LIMIT:'10',TUYA_QUOTA_BACKEND:'postgres',TUYA_QUOTA_DB_URL:'https://example.supabase.co',TUYA_QUOTA_DB_SERVICE_ROLE_KEY:'test-secret'});
- expect(await runtimeEnabled()).toBe(true);
- expect(store.get).not.toHaveBeenCalled();
- const controlResponse=await request(false);
- expect(controlResponse.statusCode).toBe(409);
- expect(store.setJSON).not.toHaveBeenCalled();
-});
-test('unreviewed trial quota blocks network calls',async()=>{
- Object.assign(process.env,{AUTOMATION_CONTROL_MODE:'deploy',AUTOMATION_RESTART_APPROVED:'true',AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true'});
- expect(await runtimeEnabled()).toBe(false);
-});
-test('budget exceeding 20 blocks deployment runtime',async()=>{
- Object.assign(process.env,{AUTOMATION_CONTROL_MODE:'deploy',AUTOMATION_RESTART_APPROVED:'true',TUYA_TRIAL_QUOTA_VERIFIED:'true',AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',TUYA_DAILY_API_LIMIT:'21'});
- expect(await runtimeEnabled()).toBe(false);
-});
 
-test('no transactional quota database means no automation even if all legacy flags true',async()=>{
- Object.assign(process.env,{AUTOMATION_CONTROL_MODE:'deploy',AUTOMATION_RESTART_APPROVED:'true',TUYA_TRIAL_QUOTA_VERIFIED:'true',AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',TUYA_DAILY_API_LIMIT:'10'});
+test('manual test can be enabled without enabling scheduled automation',async()=>{
+ Object.assign(process.env,{LIVE_TEST_ENABLED:'true',MANUAL_AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true'});
+ expect(manualLiveTestEnabled()).toBe(true);
  expect(await runtimeEnabled()).toBe(false);
- expect(store.get).not.toHaveBeenCalled();
 });

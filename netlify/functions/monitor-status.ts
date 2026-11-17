@@ -3,7 +3,7 @@ import { getStore, connectLambda } from '@netlify/blobs';
 import crypto from 'crypto';
 import type { HoodState } from '../../src/automation/stateStore';
 import type { RunRecord } from '../../src/automation/monitor';
-import { runtimeEnabled, mayArmFromDashboard, armingBlockers } from '../../src/automation/runtimeSwitch';
+import { runtimeEnabled, mayArmFromDashboard, armingBlockers, manualLiveTestEnabled } from '../../src/automation/runtimeSwitch';
 
 const headers = {
   'Content-Type': 'application/json; charset=utf-8',
@@ -93,6 +93,7 @@ export const handler: Handler = async (event) => {
     body: JSON.stringify({
       serverTime: new Date().toISOString(),
       automationEnabled: active, canArmFromDashboard: canArm, armingBlockers: armingBlockers(event.headers.host),
+      manualLiveTestEnabled: manualLiveTestEnabled(),
       controlMode: process.env.AUTOMATION_CONTROL_MODE === 'deploy' ? 'DEPLOY' : 'DISABLED',
       storageEvidence: {
         latestRunFound: run !== null,
@@ -108,7 +109,7 @@ export const handler: Handler = async (event) => {
         reasons: [
           ...(process.env.AUTOMATION_RESTART_APPROVED === 'true' ? [] : ['RESTART_APPROVAL_MISSING']),
           ...(process.env.TUYA_TRIAL_QUOTA_VERIFIED === 'true' ? [] : ['TUYA_TRIAL_QUOTA_UNVERIFIED']),
-          ...(process.env.TUYA_QUOTA_BACKEND === 'postgres' && process.env.TUYA_QUOTA_DB_URL && process.env.TUYA_QUOTA_DB_SERVICE_ROLE_KEY ? ['TUYA_HARD_QUOTA_DB_NOT_LIVE_TESTED'] : ['TUYA_HARD_QUOTA_NOT_ENFORCED']),
+          'TUYA_HARD_QUOTA_NOT_ENFORCED',
           'LG_DEVICE_MAPPING_NOT_FIELD_VERIFIED',
           'HOOD_PHYSICAL_BEHAVIOR_NOT_FIELD_VERIFIED',
           'IMMEDIATE_STOP_NOT_AVAILABLE',
@@ -128,7 +129,7 @@ export const handler: Handler = async (event) => {
           ? null : usage?.attempts ?? 0,
         limit: Number(process.env.TUYA_DAILY_API_LIMIT ?? 20),
         quotaGuardEnabled: process.env.TUYA_QUOTA_GUARD_ENABLED === 'true',
-        enforcement: process.env.TUYA_QUOTA_BACKEND === 'postgres' && process.env.TUYA_QUOTA_DB_URL && process.env.TUYA_QUOTA_DB_SERVICE_ROLE_KEY ? 'ATOMIC_DATABASE' : 'NOT_CONFIGURED',
+        enforcement: 'BEST_EFFORT_BLOBS_ONLY',
         approximate: true, // Legacy Blobs widget is NOT the transactional DB counter.
       },
       incidents: incidents.filter(Boolean),

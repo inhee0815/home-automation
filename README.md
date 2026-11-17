@@ -173,16 +173,9 @@ Blobs 저장 검증: Function 로그에서 `monitoring_write_success`를 확인�
 
 실제 자동화 재개는 **보류**됩니다. 현재 Blobs 기반 호출 카운터는 동시성을 보장하지 않으며 정확한 API 호출 상한, LG 상태 매핑, 실물 후드 동작 및 즉시 중단 기능이 아직 검증되지 않았습니다.
 
-## 원자적 Tuya API 호출 상한 (2026-11-17)
 
-새 보호 로직은 `src/tuya/quota.ts` 에서 **모든 Tuya HTTP 요청 바로 전에** Supabase/PostgREST의 `reserve_tuya_api_call` RPC를 호출합니다. DB의 `INSERT ... ON CONFLICT DO UPDATE ... WHERE used < cap`은 날짜별 단일 row에서 직렬화되므로 동일 프로젝트의 병렬 Function 호출에서도 cap 이상의 **예약 승인**이 불가능합니다. 불확실한 요청은 한도를 소비한 것으로 취급하는 보수적인 정책이며, DB 지연·실패·토큰/URL 누락 시 Tuya 호출은 차단됩니다. 토큰 발급, 상태 조회, 명령 요청 모두 예약 대상입니다.
+## 수동 실기기 테스트 모드 (2026-11-17)
 
-1. **전용 Postgres/Supabase 데이터베이스에** `supabase/migrations/20261117_atomic_tuya_api_budget.sql` 적용
-2. Netlify Functions secret에 `TUYA_QUOTA_DB_URL=https://<project>.supabase.co`, `TUYA_QUOTA_DB_SERVICE_ROLE_KEY=<service role secret>` 설정 (공개 클라이언트에 노출 금지)
-3. `TUYA_QUOTA_BACKEND=postgres`, `TUYA_DAILY_API_LIMIT`을 1~20의 **명시적 정수**로 설정. 재배포
-4. **Tuya Developer Platform → Cloud → Data Statistics → Usage**에서 실제 월간 잔여량 확인 및 계정 전체/API Explorer/외부 앱 호출량 합산
-5. 실제 API 연동 검증 및 LG/후드 안전 점검 후에만 별도 재개 승인.
+Postgres/Supabase 데이터베이스 **사용하지 않음**. 환경 변수 `LIVE_TEST_ENABLED=true`, `MANUAL_AUTOMATION_ENABLED=true`, `TUYA_COMMANDS_ENABLED=true`, `TUYA_QUOTA_GUARD_ENABLED=true` 설정 후 새 운영 배포에서 관리자 토큰으로 /api/tuya-status (GET), /api/tuya-control (POST) 호출 가능. `TUYA_DAILY_API_LIMIT=8` (허용 범위 1~8)이며 Blobs에 기록되는 카운터는 **동시 호출/다중 인스턴스에서 원자적이지 않음**. 엄격한 한도는 보장되지 않으므로 테스트 요청은 순차적으로 수동으로만 실행해야 합니다. 자동 스케줄 및 엔진은 본 테스트 단계에서 **항상 PAUSED**. 브라우저에서 인증 없는 제어 허용 없음.
 
-**보장 범위:** 이 프로젝트에서 예약 경로를 통과하는 Tuya HTTP 요청 수의 UTC 일별 상한. 이것은 Tuya 계정의 실제 청구량, 다른 앱/외부 콘솔 호출, 과거 사용량, 월별 Trial 잔여 한도를 보장하지 않습니다. **활성화와 실제 검증은 아직 하지 않았습니다.**
-
-현재 기존 Netlify의 Blobs `tuya-api/YYYY-MM-DD` 값은 과거 근사 기록이며 DB 원자 카운터가 아니므로 정확한 값으로 쓰면 안 됩니다. 월간 사용량 검증과 충분한 안전 마진 없는 경우 계속 OFF로 유지합니다.
+실기기 테스트 전 Tuya Trial 잔여량을 공식 콘솔에서 확인하고, 플러그 ON/OFF가 물리적으로 후드를 동작시키는지 현장에서 확인하세요. 토큰 요청, 조회, 명령 등은 각각 Tuya API 예산을 사용합니다. 명령 수락은 물리적 팬 작동 확인이 아닙니다.

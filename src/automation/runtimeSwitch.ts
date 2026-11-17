@@ -21,17 +21,14 @@ const store = () => getStore({
  * All new approval flags default to OFF.
  */
 export function deploymentAllowsRun(): boolean {
-  const budget = Number(process.env.TUYA_DAILY_API_LIMIT ?? '20');
-  return process.env.TUYA_QUOTA_BACKEND === 'postgres'
-    && !!process.env.TUYA_QUOTA_DB_URL
-    && !!process.env.TUYA_QUOTA_DB_SERVICE_ROLE_KEY
-    && process.env.AUTOMATION_CONTROL_MODE === 'deploy'
-    && process.env.AUTOMATION_RESTART_APPROVED === 'true'
-    && process.env.TUYA_TRIAL_QUOTA_VERIFIED === 'true'
-    && process.env.AUTOMATION_ENABLED === 'true'
-    && process.env.TUYA_COMMANDS_ENABLED === 'true'
+  // Scheduled automatic control stays off during manual hardware tests.
+  return false;
+}
+export function manualLiveTestEnabled(): boolean {
+  return process.env.LIVE_TEST_ENABLED === 'true'
+    && process.env.MANUAL_AUTOMATION_ENABLED === 'true'
     && process.env.TUYA_QUOTA_GUARD_ENABLED === 'true'
-    && Number.isSafeInteger(budget) && budget >= 1 && budget <= 20;
+    && process.env.TUYA_COMMANDS_ENABLED === 'true';
 }
 const PRODUCTION_SITE_ID = '178acf14-19c5-40c9-b50e-3a11162a0412';
 const PRODUCTION_HOST = 'sweethome-automation.netlify.app';
@@ -45,9 +42,9 @@ function isProductionRequest(host?: string): boolean {
     && host?.toLowerCase() === PRODUCTION_HOST;
 }
 export function armingBlockers(host?: string): string[] {
-  const blockers: string[] = ['DASHBOARD_ON_UNSUPPORTED_USE_DEPLOY_CONTROL'];
+  const blockers: string[] = ['SCHEDULED_AUTOMATION_DISABLED_DURING_LIVE_TEST'];
   if (process.env.AUTOMATION_CONTROL_MODE !== 'deploy') blockers.push('DEPLOY_CONTROL_MODE_REQUIRED');
-  if (process.env.TUYA_QUOTA_BACKEND !== 'postgres' || !process.env.TUYA_QUOTA_DB_URL || !process.env.TUYA_QUOTA_DB_SERVICE_ROLE_KEY) blockers.push('ATOMIC_QUOTA_DATABASE_REQUIRED');
+  if (process.env.LIVE_TEST_ENABLED !== 'true') blockers.push('MANUAL_TEST_DISABLED');
   if (process.env.AUTOMATION_RESTART_APPROVED !== 'true') blockers.push('RESTART_REVIEW_REQUIRED');
   if (process.env.TUYA_TRIAL_QUOTA_VERIFIED !== 'true') blockers.push('TUYA_TRIAL_QUOTA_UNVERIFIED');
   const budget = Number(process.env.TUYA_DAILY_API_LIMIT ?? 20);

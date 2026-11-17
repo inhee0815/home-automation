@@ -1,8 +1,8 @@
 jest.mock('@netlify/blobs', () => ({ getStore: jest.fn(), connectLambda: jest.fn() }));
 import { getStore } from '@netlify/blobs';
 import { handler } from '../../netlify/functions/monitor-status';
-import { runtimeEnabled,mayArmFromDashboard,armingBlockers } from '../../src/automation/runtimeSwitch';
-jest.mock('../../src/automation/runtimeSwitch',()=>({runtimeEnabled:jest.fn(),mayArmFromDashboard:jest.fn(),armingBlockers:jest.fn()}));
+import { runtimeEnabled,mayArmFromDashboard,armingBlockers,manualLiveTestEnabled } from '../../src/automation/runtimeSwitch';
+jest.mock('../../src/automation/runtimeSwitch',()=>({runtimeEnabled:jest.fn(),mayArmFromDashboard:jest.fn(),armingBlockers:jest.fn(),manualLiveTestEnabled:jest.fn()}));
 const store = { get: jest.fn(), list: jest.fn() };
 async function request(token?: string) {
   return await handler!({
@@ -15,6 +15,7 @@ beforeEach(() => {
   (runtimeEnabled as jest.Mock).mockResolvedValue(false);
   (mayArmFromDashboard as jest.Mock).mockReturnValue(false);
   (armingBlockers as jest.Mock).mockReturnValue(['NOT_PRODUCTION_SITE']);
+  (manualLiveTestEnabled as jest.Mock).mockReturnValue(false);
   (getStore as jest.Mock).mockReturnValue(store);
   process.env.AUTOMATION_ADMIN_TOKEN = 'test-admin';
   delete process.env.AUTOMATION_ENABLED;
