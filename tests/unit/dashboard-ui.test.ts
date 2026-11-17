@@ -70,3 +70,19 @@ test('restored login executes page script and immediately attempts authenticated
    headers:{'x-automation-token':'stored-test-token'},
  }));
 });
+
+test('operations overview shows clear state and distinguishes cache from observed status',()=>{
+ expect(html).toContain('id="summaryHero"');
+ expect(html).toContain('id="summaryTitle"');
+ expect(html).toContain('id="summaryText"');
+ expect(html).toContain('OFF로 기록됐지만 실제 확인은 아니에요');
+ expect(html).toContain('설정된 지연 시간이 지난 뒤 다음 예약 실행에서 OFF를 시도합니다.');
+});
+test('recent events and detailed logs have distinct roles and filters',()=>{
+ expect(html).toContain('id="eventTimeline"');
+ expect(html).toContain('id="historyDetail"');
+ expect(html).toContain('id="filterChanges"');
+ expect(html).toContain('id="filterErrors"');
+ expect(html).toContain("function renderHistory()");
+ expect(html).toContain("renderHistory();renderTimeline(data);renderSummary(data);");
+});
