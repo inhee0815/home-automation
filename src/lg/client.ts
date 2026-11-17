@@ -176,7 +176,8 @@ export class LgThinQClient {
 
     const burners: BurnerState[] = [];
     let isOperating = false;
-    let powerState: 'ON' | 'OFF' | 'UNKNOWN' = 'OFF';
+    let powerState: 'ON' | 'OFF' | 'UNKNOWN' = 'UNKNOWN';
+    let observedExplicitState = false;
 
     const items = Array.isArray(root)
       ? root
@@ -190,7 +191,10 @@ export class LgThinQClient {
         const zoneState = String(
           zone.cookingZone?.currentState || zone.currentState || ''
         ).toUpperCase();
-        const level = Number(zone.power?.powerLevel || zone.powerLevel || 0);
+        const rawLevel = zone.power?.powerLevel ?? zone.powerLevel;
+        const level = rawLevel === undefined || rawLevel === null ? 0 : Number(rawLevel);
+        const knownState = ['COOK','ON','RUNNING','OFF','STOP','STOPPED','STANDBY','IDLE'].includes(zoneState);
+        if (knownState || rawLevel !== undefined && rawLevel !== null && Number.isFinite(level)) observedExplicitState = true;
 
         const active = zoneState === 'COOK' || level > 0;
         burners.push({
@@ -216,12 +220,17 @@ export class LgThinQClient {
           let level = 0;
           let active = false;
 
-          if (typeof val === 'number') {
+          if (typeof val === 'number' && Number.isFinite(val)) {
+            observedExplicitState = true;
             level = val;
             active = level > 0;
           } else if (typeof val === 'object' && val !== null) {
-            level = Number(val.powerLevel || val.level || val.power || 0);
-            active = val.state === 'ON' || val.isOperating || level > 0;
+            const rawLevel = val.powerLevel ?? val.level ?? val.power;
+            const stateValue = typeof val.state === 'string' ? val.state.toUpperCase() : '';
+            const operating = typeof val.isOperating === 'boolean' ? val.isOperating : undefined;
+            if (rawLevel !== undefined && Number.isFinite(Number(rawLevel)) || operating !== undefined || ['ON','OFF'].includes(stateValue)) observedExplicitState = true;
+            level = rawLevel === undefined ? 0 : Number(rawLevel);
+            active = stateValue === 'ON' || operating === true || level > 0;
           }
 
           burners.push({
@@ -240,6 +249,7 @@ export class LgThinQClient {
 
     const opState = String(
       root.operation?.operationState ||
+      root.state?.operationState ||
       root.operationState ||
       root.cooktopState ||
       root.powerState ||
@@ -248,9 +258,14 @@ export class LgThinQClient {
     ).toUpperCase();
 
     if (['RUNNING', 'COOKING', 'POWER_ON', 'ON', 'WORKING', 'COOK'].includes(opState)) {
+      observedExplicitState = true;
       isOperating = true;
       powerState = 'ON';
+    } else if (['OFF', 'POWER_OFF', 'STOPPED', 'STANDBY', 'IDLE'].includes(opState)) {
+      observedExplicitState = true;
     }
+    if (!isOperating && observedExplicitState) powerState = 'OFF';
+    if (!observedExplicitState) powerState = 'UNKNOWN';
 
     return {
       deviceId: deviceId || rawData.deviceId || '',
