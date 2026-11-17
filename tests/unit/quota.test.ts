@@ -29,6 +29,6 @@ test('fails closed on store outage',async()=>{
  await expect(reserveTuyaApiAttempt()).rejects.toThrow('store unavailable');
 });
 test('denies invalid limit',async()=>{
- process.env.TUYA_DAILY_API_LIMIT='30';
- await expect(reserveTuyaApiAttempt()).rejects.toThrow('1..8');
+ process.env.TUYA_DAILY_API_LIMIT='1001';
+ await expect(reserveTuyaApiAttempt()).rejects.toThrow('1..1000');
 });
