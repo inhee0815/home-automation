@@ -45,7 +45,7 @@ test('logout clears persistent and session tokens',()=>{
 
 test('restored login executes page script and immediately attempts authenticated refresh',async()=>{
  const {runInNewContext}=require('node:vm');
- const script=html.match(/<script>([\\s\\S]*?)<\\/script>/)?.[1];
+ const script=html.split('<script>')[1]?.split('</script>')[0];
  expect(script).toBeTruthy();
  const controls=new Map<string,any>();
  const el=(id:string)=>{
