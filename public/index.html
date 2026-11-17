@@ -58,7 +58,7 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
  <div><div class="label">마지막 확인</div><div class="value" id="verified">—</div></div>
  <div><div class="label">제어 실패 횟수</div><div class="value" id="fails">—</div></div>
 </div></section>
-<section class="surface"><h2>장애 이력</h2><div class="scroll"><table><thead><tr><th>장애 종류</th><th>최근 발생</th><th>횟수</th></tr></thead><tbody id="incidents"><tr><td colspan="3" class="muted">조회 전</td></tr></tbody></table></div></section>
+<section class="surface"><h2>Tuya 차단기 복구</h2><p>실패 원인을 확인하고 플러그 상태를 조회한 후에만 복구합니다. 복구 시 다음 예약 실행에서 실제 전원 제어가 재개될 수 있습니다.</p><button id="resetBreaker" disabled>플러그 확인 후 차단기 복구</button><p id="breakerFeedback"></p><small id="failureReason">최근 실패: —</small></section><section class="surface"><h2>장애 이력</h2><div class="scroll"><table><thead><tr><th>장애 종류</th><th>최근 발생</th><th>횟수</th></tr></thead><tbody id="incidents"><tr><td colspan="3" class="muted">조회 전</td></tr></tbody></table></div></section>
 <section class="surface"><h2>최근 실행 내역</h2><div class="scroll"><table><thead><tr><th>시각</th><th>결과</th><th>행동</th><th>인덕션</th><th>후드</th></tr></thead><tbody id="history"><tr><td colspan="5" class="muted">조회 전</td></tr></tbody></table></div></section>
 <footer>읽기 전용 모니터링 화면입니다. 수동 전원 제어는 제공하지 않습니다. 데이터가 없다는 것은 정상 동작의 증거가 아닙니다.</footer>
 </main>
@@ -71,7 +71,7 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
  const empty=(el,span)=>{el.replaceChildren();const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=span;td.textContent='기록 없음';tr.append(td);el.append(tr)};
  const rows=(id,items,keys)=>{const root=$(id);root.replaceChildren();if(!items.length){empty(root,keys.length);return}
    for(const item of items){const tr=document.createElement('tr');for(const fn of keys){const td=document.createElement('td');td.textContent=String(fn(item)??'—');tr.append(td)}root.append(tr)}};
- const clear=()=>{key='';$('token').value='';set('feedback','관리자 토큰을 지웠습니다.');$('switchOff').disabled=true;$('switchOn').disabled=true;set('storageState','—');set('readiness','—');set('readinessReasons','인증 후 확인');$('testStatus').disabled=true;$('testOn').disabled=true;$('testOff').disabled=true;};
+ const clear=()=>{key='';$('token').value='';set('feedback','관리자 토큰을 지웠습니다.');$('switchOff').disabled=true;$('switchOn').disabled=true;set('storageState','—');set('readiness','—');set('readinessReasons','인증 후 확인');$('testStatus').disabled=true;$('testOn').disabled=true;$('testOff').disabled=true;$('resetBreaker').disabled=true;};
  $('clear').onclick=clear;
  async function changeSwitch(enabled){
   if(enabled && $('switchOn').disabled){set('switchFeedback','ON 버튼이 잠긴 상태입니다. 운영 상태를 다시 조회하세요.');return}
@@ -108,6 +108,16 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
    }catch(e){set('testFeedback','실기기 테스트 실패: '+e.message);}
    finally{$('testStatus').disabled=false;$('testOn').disabled=false;$('testOff').disabled=false;}
  }
+ $('resetBreaker').onclick=async()=>{
+   if(!key)return set('breakerFeedback','관리자 토큰으로 조회하세요.');
+   if(!confirm('Tuya 플러그 상태 조회 후 자동 제어 차단을 해제할까요? 다음 예약 실행에서 후드가 실제 작동할 수 있습니다.'))return;
+   $('resetBreaker').disabled=true;
+   try{const r=await fetch('/api/tuya-reset-breaker',{method:'POST',headers:{'x-automation-token':key}});
+   const d=await r.json();if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+   set('breakerFeedback','복구 완료, 현재 플러그 '+d.confirmed);}
+   catch(e){set('breakerFeedback','복구 실패: '+e.message)}
+   $('refresh').click();
+ };
  $('testStatus').onclick=()=>liveTest('status');
  $('testOn').onclick=()=>liveTest('on');
  $('testOff').onclick=()=>liveTest('off');
@@ -150,6 +160,8 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
    $('testStatus').disabled=!data.manualLiveTestEnabled;
    $('testOn').disabled=!data.manualLiveTestEnabled;
    $('testOff').disabled=!data.manualLiveTestEnabled;
+   $('resetBreaker').disabled=!(data.hood?.failureCount>=3);
+   set('failureReason','최근 실패: '+(data.hood?.lastFailureReason||'UNKNOWN')+' · '+date(data.hood?.lastFailureAt));
    set('testFeedback',data.manualLiveTestEnabled?'수동 실기기 테스트 허용 · 현장에서 하나씩 확인':'수동 실기기 테스트 비활성화 · LIVE_TEST_ENABLED 등 확인');
    set('overall',data.status);set('mode',data.status);set('modeSub',data.commandsEnabled?'제어 허용':'명령 차단');
    set('last',data.latestRun?date(data.latestRun.time):'기록 없음');set('lastSub',data.latestRun?.action||'실행 기록 없음');

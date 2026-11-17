@@ -5,6 +5,7 @@ import { BlobStateRepository, HoodState, Power, StateRepository } from './stateS
 import { AutomationResult } from './types';
 import { notifyIncident } from './notification';
 import { runtimeEnabled } from './runtimeSwitch';
+import { classifyTuyaFailure } from '../tuya/failure';
 
 export const SHUTDOWN_DELAY_MS = Math.max(0, Number(process.env.SHUTDOWN_DELAY_SECONDS ?? 90)) * 1000;
 const retryMs = () => Math.max(60, Number(process.env.CONTROL_RETRY_SECONDS ?? 300)) * 1000;
@@ -101,7 +102,7 @@ export class AutomationEngine {
     if (state.failureCount >= 3) {
       await notifyIncident('TUYA_UNAVAILABLE', '명령 실패 누적으로 제어가 차단되었습니다.');
       await this.store.save(next);
-      return result('SKIPPED_TUYA_ERROR', induction, state.confirmed, 'Circuit breaker open; manual reset required.');
+      return result('SKIPPED_TUYA_ERROR', induction, state.confirmed, 'Circuit breaker open; manual reset required. Last failure: '+(state.lastFailureReason||'UNKNOWN'));
     }
     // When an OFF cooldown is pending, a new ON target must not be blocked by
     // that previous target. Verify the physical plug before issuing ON.
@@ -151,13 +152,15 @@ export class AutomationEngine {
       next.nextRetryAt = now + retryMs();
       await this.store.save(next);
       return result(target === 'ON' ? 'TURN_ON' : 'TURN_OFF', induction, 'UNKNOWN', 'Tuya command accepted; physical state unverified.', true);
-    } catch {
+    } catch (error) {
       next.confirmed = 'UNKNOWN';
+      next.lastFailureReason = classifyTuyaFailure(error);
+      next.lastFailureAt = now;
       next.failureCount = state.failureCount + 1;
       next.nextRetryAt = now + Math.min(3600000, retryMs() * Math.pow(2, Math.min(5, next.failureCount - 1)));
       await this.store.save(next);
       await notifyIncident('TUYA_UNAVAILABLE', '후드 전원 변경 명령이 실패했습니다.');
-      return result('SKIPPED_TUYA_ERROR', induction, 'UNKNOWN', 'Tuya command failed; retry delayed.');
+      return result('SKIPPED_TUYA_ERROR', induction, 'UNKNOWN', 'Tuya command failed ('+next.lastFailureReason+'); retry delayed.');
     }
   }
 }
