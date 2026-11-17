@@ -42,11 +42,11 @@ test('unchanged OFF consumes zero Tuya requests', async () => {
   expect(s.tuya.getStatus).not.toHaveBeenCalled();
   expect(command).not.toHaveBeenCalled();
 });
-test('ON transition sends one direct command without GET', async () => {
+test('ON transition checks physical plug before command', async () => {
   const s = setup(on, baseline());
   expect((await s.engine.evaluateAndExecute(200000)).action).toBe('TURN_ON');
   expect(command).toHaveBeenCalledWith(true);
-  expect(s.tuya.getStatus).not.toHaveBeenCalled();
+  expect(s.tuya.getStatus).toHaveBeenCalledTimes(1);
 });
 test('OFF is delayed from first OFF detection', async () => {
   const s = setup(off, baseline({induction: 'ON', desired: 'ON', confirmed: 'ON', offDetectedAt: null}));
@@ -120,4 +120,36 @@ test('command failure stores sanitized diagnostic without exposing provider deta
  const persisted=s.store.save.mock.calls.at(-1)?.[0];
  expect(persisted?.failureCount).toBe(1);
  expect(persisted?.lastFailureReason).toBe('UNKNOWN');
+});
+
+test('new ON target repairs stale cached ON after verifying actual plug OFF',async()=>{
+ const s=setup(on,baseline({induction:'OFF',desired:'OFF',confirmed:'ON'}));
+ (s.tuya.getStatus as jest.Mock).mockResolvedValue({online:true,switch_1:false});
+ expect((await s.engine.evaluateAndExecute(200000)).action).toBe('TURN_ON');
+ expect(command).toHaveBeenCalledWith(true);
+});
+test('OFF target after 90s checks plug and sends OFF if physically ON',async()=>{
+ const s=setup(off,baseline({induction:'OFF',desired:'ON',confirmed:'OFF',offDetectedAt:1000}));
+ (s.tuya.getStatus as jest.Mock).mockResolvedValue({online:true,switch_1:true});
+ expect((await s.engine.evaluateAndExecute(200000)).action).toBe('TURN_OFF');
+ expect(command).toHaveBeenCalledWith(false);
+});
+test('OFF target skips command if actual plug already OFF',async()=>{
+ const s=setup(off,baseline({induction:'OFF',desired:'ON',confirmed:'ON',offDetectedAt:1000}));
+ (s.tuya.getStatus as jest.Mock).mockResolvedValue({online:true,switch_1:false});
+ expect((await s.engine.evaluateAndExecute(200000)).action).toBe('ALREADY_OFF');
+ expect(command).not.toHaveBeenCalled();
+});
+test('LG turning OFF during evaluation cancels stale ON command',async()=>{
+ const s=setup(on,baseline());
+ s.lg.getCooktopStatus.mockResolvedValueOnce(on).mockResolvedValueOnce(off);
+ expect((await s.engine.evaluateAndExecute(200000)).message).toMatch(/Induction changed/);
+ expect(command).not.toHaveBeenCalled();
+});
+test('LG turning ON during evaluation cancels stale OFF command',async()=>{
+ const s=setup(off,baseline({induction:'OFF',desired:'ON',confirmed:'ON',offDetectedAt:1000}));
+ (s.tuya.getStatus as jest.Mock).mockResolvedValue({online:true,switch_1:true});
+ s.lg.getCooktopStatus.mockResolvedValueOnce(off).mockResolvedValueOnce(on);
+ expect((await s.engine.evaluateAndExecute(200000)).message).toMatch(/Induction changed/);
+ expect(command).not.toHaveBeenCalled();
 });
