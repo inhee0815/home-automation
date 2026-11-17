@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import crypto from 'crypto';
-import { mayArmFromDashboard, runtimeEnabled, setRuntimeSwitch } from '../../src/automation/runtimeSwitch';
+import { mayArmFromDashboard, armingBlockers, runtimeEnabled, setRuntimeSwitch } from '../../src/automation/runtimeSwitch';
 
 const headers = {'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
 function authorized(token?: string) {
@@ -21,10 +21,11 @@ export const handler: Handler = async event => {
   if (!data || typeof data!=='object' || typeof (data as {enabled?: unknown}).enabled!=='boolean')
     return {statusCode:400,headers,body:JSON.stringify({error:'Expected {"enabled":boolean}'})};
   const enabled=(data as {enabled:boolean}).enabled;
-  if (enabled && !mayArmFromDashboard())
-    return {statusCode:409,headers,body:JSON.stringify({error:'Cannot enable: production safety prerequisites are not configured'})};
+  const host = event.headers.host;
+  if (enabled && !mayArmFromDashboard(host))
+    return {statusCode:409,headers,body:JSON.stringify({error:'Cannot enable: production safety prerequisites are not configured',blockers:armingBlockers(host)})};
   try {
-    await setRuntimeSwitch(enabled);
+    await setRuntimeSwitch(enabled,host);
     const observed=await runtimeEnabled();
     // OFF can take effect even with disabled env; readback doesn't distinguish persisted OFF.
     if (enabled && !observed) return {statusCode:503,headers,body:JSON.stringify({error:'Failed to verify armed state'})};
