@@ -36,8 +36,8 @@ test('disabled automation never makes external calls', async () => {
   expect(s.tuya.getStatus).not.toHaveBeenCalled();
   expect(command).not.toHaveBeenCalled();
 });
-test('unchanged OFF consumes zero Tuya requests', async () => {
-  const s = setup(off, baseline());
+test('recently verified unchanged OFF consumes zero Tuya requests', async () => {
+  const s = setup(off, baseline({lastVerifiedAt:180000}));
   expect((await s.engine.evaluateAndExecute(200000)).action).toBe('ALREADY_OFF');
   expect(s.tuya.getStatus).not.toHaveBeenCalled();
   expect(command).not.toHaveBeenCalled();
