@@ -1,7 +1,7 @@
 import { connectLambda } from '@netlify/blobs';
 import type {Handler} from '@netlify/functions';
 import { sendDirectPlugCommand } from '../../src/tuya/directCommand';
-import { manualLiveTestEnabled } from '../../src/automation/runtimeSwitch';
+import { manualLiveTestEnabled, runtimeEnabled } from '../../src/automation/runtimeSwitch';
 
 export const handler: Handler = async (event) => {
   connectLambda(event as unknown as Parameters<typeof connectLambda>[0]);
@@ -18,6 +18,7 @@ export const handler: Handler = async (event) => {
     return {statusCode: 400, body: 'Expected {"on":boolean}'};
   try {
     if (!manualLiveTestEnabled()) return {statusCode:403,body:'Manual live test is disabled'};
+    if (await runtimeEnabled()) return {statusCode:409,body:JSON.stringify({ok:false,error:'Manual commands are disabled while scheduled automation is active'})};
     await sendDirectPlugCommand((body as {on: boolean}).on);
     return {statusCode: 200, body: JSON.stringify({ok: true, status: 'command_accepted_not_verified'})};
   } catch {
