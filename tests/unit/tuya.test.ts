@@ -4,6 +4,7 @@ import { handler as tuyaStatusHandler } from '../../netlify/functions/tuya-statu
 import { handler as tuyaControlHandler } from '../../netlify/functions/tuya-control';
 
 jest.mock('axios');
+jest.mock('../../src/tuya/quota', () => ({ reserveTuyaApiAttempt: jest.fn(async () => undefined) }));
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('Tuya Client & API Endpoints', () => {
@@ -24,6 +25,7 @@ describe('Tuya Client & API Endpoints', () => {
     mockedAxios.create.mockReturnValue({
       get: mockGet,
       post: mockPost,
+      interceptors: { request: { use: jest.fn() } },
     } as any);
   });
 
@@ -151,18 +153,18 @@ describe('Tuya Client & API Endpoints', () => {
   });
 
   describe('POST /api/tuya-control function', () => {
-    it('should validate request body and reject invalid JSON or non-boolean "on"', async () => {
+    it('should reject manual control while disabled before parsing input', async () => {
       const responseInvalidJson = await tuyaControlHandler(
         { httpMethod: 'POST', body: 'invalid-json' } as any,
         {} as any
       );
-      expect(responseInvalidJson?.statusCode).toBe(400);
+      expect(responseInvalidJson?.statusCode).toBe(403);
 
       const responseNonBoolean = await tuyaControlHandler(
         { httpMethod: 'POST', body: JSON.stringify({ on: 'yes' }) } as any,
         {} as any
       );
-      expect(responseNonBoolean?.statusCode).toBe(400);
+      expect(responseNonBoolean?.statusCode).toBe(403);
     });
   });
 });
