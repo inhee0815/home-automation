@@ -18,6 +18,11 @@ button:disabled{opacity:.6}.badge{border:1px solid #58687e;background:#202e40;bo
 small{color:#92a6bf}h2{font-size:18px;margin:2px 0 14px}
 table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:left;border-bottom:1px solid #304058;font-size:13px;vertical-align:top}th{color:#91a6be;font-weight:500}
 .scroll{overflow-x:auto}.muted{color:#9eafc4}.warning{color:#ffce86}.error{color:#ffadab}.ok{color:#9ae3c1}
+.hero{border:1px solid #334763;border-radius:18px;padding:22px;margin-top:20px;background:#19283b}.hero[data-level="ok"]{border-color:#408c73}.hero[data-level="warn"]{border-color:#a88145}.hero[data-level="bad"]{border-color:#aa5354}.hero[data-level="unknown"]{border-color:#58687e}
+.hero-title{font-size:24px;font-weight:800;margin:8px 0}.hero-text{color:#b6c5d7;line-height:1.65}.status-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.chip{padding:9px 12px;border-radius:9px;border:1px solid #344b63;background:#101d2d;font-size:13px}.chip strong{color:#f1f6ff}
+.timeline{display:grid;gap:9px}.event{display:grid;grid-template-columns:100px minmax(0,1fr);gap:12px;padding:13px 0;border-bottom:1px solid #2e3e55}.event:last-child{border-bottom:0}.event-time{color:#9fb3cc;font-size:13px}.event-title{font-weight:700}.event-sub{color:#a8bbce;font-size:13px;margin-top:5px;line-height:1.5}
+.filter-row{display:flex;gap:8px;flex-wrap:wrap}.filter-row button{background:#273950;color:#cce4f4;padding:8px 13px}.filter-row button[aria-pressed="true"]{background:#cee9ff;color:#102338}
+details.more{margin-top:20px;border:1px solid #304058;border-radius:16px;background:#151f30}details.more>summary{cursor:pointer;padding:18px 20px;font-weight:700}details.more>.more-inner{padding:0 20px 20px}details.more .surface{margin-top:12px}
 #feedback{min-height:24px;font-size:13px}footer{padding:25px 0;color:#8597ad;font-size:12px}
 @media(max-width:800px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:24px}}
 @media(max-width:420px){.grid{grid-template-columns:1fr}}
@@ -28,13 +33,31 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
 <p>기본적으로 현재 탭에서 인증을 유지합니다. 아래 옵션을 선택하면 이 브라우저를 다시 열어도 토큰을 기억합니다. 공용 기기에서는 선택하지 마세요. 로그인 정보는 브라우저 저장소에 보관되므로 이 기기나 브라우저 프로필에 접근할 수 있는 사람에게 노출될 수 있습니다.</p>
 <div class="controls"><input id="token" type="password" autocomplete="off" placeholder="관리자 토큰 입력" aria-label="관리자 토큰">
 <button id="refresh">조회</button><button id="clear">로그아웃</button></div><p style="margin-top:12px"><label><input id="remember" type="checkbox" style="min-width:auto;flex:none;width:16px;height:16px;vertical-align:middle;margin-right:6px">이 기기에서 로그인 유지 (공용 기기에서는 선택하지 않기)</label></p><p id="feedback" aria-live="polite"></p></section>
+<section class="hero" id="summaryHero" data-level="unknown" aria-live="polite">
+ <div class="eyebrow">현재 상태 · 마지막 수집 기준</div>
+ <div class="hero-title" id="summaryTitle">인증 후 상태를 확인할 수 있어요</div>
+ <div class="hero-text" id="summaryText">인덕션과 후드 전원 상태, 마지막 제어 결과를 한곳에서 확인합니다.</div>
+ <div class="status-chips">
+  <div class="chip">자동화 <strong id="sumAutomation">—</strong></div>
+  <div class="chip">인덕션 <strong id="sumInduction">—</strong></div>
+  <div class="chip">후드 목표 <strong id="sumDesired">—</strong></div>
+  <div class="chip">플러그 기록 <strong id="sumPlug">—</strong></div>
+  <div class="chip">최근 실행 <strong id="sumAt">—</strong></div>
+ </div>
+ <p class="muted" style="font-size:12px;margin-bottom:0">플러그 기록은 물리 팬 동작을 보증하지 않습니다. 마지막 확인 시각과 오류 여부를 함께 판단합니다.</p>
+</section>
+<section class="surface"><h2>최근 동작 한눈에 보기</h2>
+ <p id="eventSummary" class="muted">최근 명령 및 전환 기록을 불러옵니다.</p>
+ <div id="eventTimeline" class="timeline"><p class="muted">인증 후 표시됩니다.</p></div>
+ <p><a href="#historyDetail" style="color:#b9e0ff">상세 실행 로그 보기 ↓</a></p>
+</section>
 <div class="grid">
  <div class="tile"><div class="label">자동화 상태</div><div class="value" id="mode">—</div><small id="modeSub">조회 전</small></div>
  <div class="tile"><div class="label">마지막 실행</div><div class="value" id="last">—</div><small id="lastSub">—</small></div>
  <div class="tile"><div class="label">오늘 Tuya API 요청</div><div class="value" id="quota">—</div><small>추정 사용량 · 실제 청구량 아님</small></div>
  <div class="tile"><div class="label">후드 제어 결과</div><div class="value" id="hood">—</div><small id="hoodSub">실제 팬 회전 여부는 확인 불가</small></div>
 </div>
-<section class="surface"><h2>저장소 · 재개 준비 상태</h2>
+<details class="more"><summary>고급 운영 정보 · 설정 및 진단 펼치기</summary><div class="more-inner"><section class="surface"><h2>저장소 · 재개 준비 상태</h2>
 <div class="grid" style="margin-bottom:0">
  <div class="tile"><div class="label">Blobs 기록 읽기</div><div class="value" id="storageState">—</div><small id="storageSub">인증 후 조회</small></div>
  <div class="tile"><div class="label">마지막 기록 시각</div><div class="value" id="storageAt">—</div><small>쓰기 로그와 대조해 읽기 확인</small></div>
@@ -59,7 +82,8 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
  <div><div class="label">제어 실패 횟수</div><div class="value" id="fails">—</div></div>
 </div></section>
 <section class="surface"><h2>Tuya 차단기 복구</h2><p>실패 원인을 확인하고 플러그 상태를 조회한 후에만 복구합니다. 복구 시 다음 예약 실행에서 실제 전원 제어가 재개될 수 있습니다.</p><button id="resetBreaker" disabled>플러그 확인 후 차단기 복구</button><p id="breakerFeedback"></p><small id="failureReason">최근 실패: —</small></section><section class="surface"><h2>장애 이력</h2><div class="scroll"><table><thead><tr><th>장애 종류</th><th>최근 발생</th><th>횟수</th></tr></thead><tbody id="incidents"><tr><td colspan="3" class="muted">조회 전</td></tr></tbody></table></div></section>
-<section class="surface"><h2>최근 실행 내역</h2><div class="scroll"><table><thead><tr><th>시각</th><th>결과</th><th>행동</th><th>인덕션</th><th>후드</th></tr></thead><tbody id="history"><tr><td colspan="5" class="muted">조회 전</td></tr></tbody></table></div></section>
+</div></details>
+<section class="surface" id="historyDetail"><h2>상세 실행 로그</h2><div class="filter-row" role="group" aria-label="실행 로그 필터"><button type="button" id="filterAll" aria-pressed="true">전체</button><button type="button" id="filterChanges" aria-pressed="false">전원 명령</button><button type="button" id="filterErrors" aria-pressed="false">오류</button></div><p class="muted" id="logHint">로그를 선택해 전체 메시지를 확인할 수 있어요.</p><div class="scroll"><table><thead><tr><th>시각</th><th>결과</th><th>행동</th><th>인덕션</th><th>후드</th><th>설명</th></tr></thead><tbody id="history"><tr><td colspan="6" class="muted">조회 전</td></tr></tbody></table></div></section>
 <footer>읽기 전용 모니터링 화면입니다. 수동 전원 제어는 제공하지 않습니다. 데이터가 없다는 것은 정상 동작의 증거가 아닙니다.</footer>
 </main>
 <script>
@@ -81,6 +105,54 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
  const empty=(el,span)=>{el.replaceChildren();const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=span;td.textContent='기록 없음';tr.append(td);el.append(tr)};
  const rows=(id,items,keys)=>{const root=$(id);root.replaceChildren();if(!items.length){empty(root,keys.length);return}
    for(const item of items){const tr=document.createElement('tr');for(const fn of keys){const td=document.createElement('td');td.textContent=String(fn(item)??'—');tr.append(td)}root.append(tr)}};
+ let lastHistory=[],activeFilter='all';
+ const actionKorean={TURN_ON:'후드 ON 명령',TURN_OFF:'후드 OFF 명령',ALREADY_ON:'ON으로 판단',ALREADY_OFF:'OFF로 판단',WAITING_SHUTDOWN_DELAY:'OFF 지연 대기',SKIPPED_LG_ERROR:'LG 상태 조회 실패',SKIPPED_TUYA_ERROR:'Tuya 확인/명령 실패'};
+ const labelAction=a=>actionKorean[a]||a||'상태 없음';
+ const timeShort=value=>{const d=new Date(value);return Number.isNaN(d.getTime())?'—':d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
+ const hasError=x=>x.outcome==='ERROR'||String(x.action||'').startsWith('SKIPPED_');
+ const hasChange=x=>x.changed===true||x.action==='TURN_ON'||x.action==='TURN_OFF';
+ function renderHistory(){
+  const filtered=lastHistory.filter(x=>activeFilter==='all'||(activeFilter==='errors'?hasError(x):hasChange(x)));
+  rows('history',filtered,[x=>date(x.time),x=>x.outcome,x=>labelAction(x.action),x=>x.induction,x=>x.hood,x=>x.message||'—']);
+  for(const [id,value] of [['filterAll','all'],['filterChanges','changes'],['filterErrors','errors']])$(id).setAttribute('aria-pressed',String(activeFilter===value));
+  set('logHint',filtered.length+'개 표시 · 전체 '+lastHistory.length+'개 · 후드 상태는 팬 실물 확인과 다를 수 있음');
+ }
+ $('filterAll').onclick=()=>{activeFilter='all';renderHistory()};
+ $('filterChanges').onclick=()=>{activeFilter='changes';renderHistory()};
+ $('filterErrors').onclick=()=>{activeFilter='errors';renderHistory()};
+ function renderTimeline(data){
+  const xs=(data.history||[]).filter(x=>hasChange(x)||hasError(x)).slice(0,5);
+  const root=$('eventTimeline');root.replaceChildren();
+  if(!xs.length){const p=document.createElement('p');p.className='muted';p.textContent='최근 저장된 전원 명령이나 오류가 없어요. 상세 로그에 더 많은 실행 기록이 있을 수 있습니다.';root.append(p);}
+  for(const x of xs){
+   const line=document.createElement('div');line.className='event';
+   const stamp=document.createElement('div');stamp.className='event-time';stamp.textContent=timeShort(x.time);
+   const body=document.createElement('div');
+   const title=document.createElement('div');title.className='event-title';title.textContent=labelAction(x.action)+(hasError(x)?' · 확인 필요':'');
+   const sub=document.createElement('div');sub.className='event-sub';sub.textContent=(x.message||'설명 없음')+' · 인덕션 '+x.induction+' · 기록된 후드 '+x.hood;
+   body.append(title,sub);line.append(stamp,body);root.append(line);
+  }
+  set('eventSummary','최근 기록 '+(data.history||[]).length+'건 중 명령/오류 '+(data.history||[]).filter(x=>hasChange(x)||hasError(x)).length+'건 · 기록은 최근 20개까지 표시');
+ }
+ function renderSummary(data){
+  const hero=$('summaryHero'),last=data.latestRun,hood=data.hood;
+  const isStale=data.status==='STALE'||data.storageEvidence?.status==='STALE';
+  const isError=last?.outcome==='ERROR'||hasError(last||{});
+  const isWaiting=last?.action==='WAITING_SHUTDOWN_DELAY';
+  let level='ok',title='자동화가 실행되고 있어요',desc='최근 실행과 저장된 기기 상태를 확인했습니다.';
+  if(!data.automationEnabled){level='warn';title='자동화가 중지되어 있어요';desc='인덕션 변화가 후드 자동 제어로 이어지지 않습니다.';}
+  else if(isStale){level='warn';title='최근 실행 기록이 오래됐어요';desc='예약 실행 또는 기록 저장 상태를 확인해야 합니다.';}
+  else if(isError){level='bad';title='최근 자동화 처리에 문제가 있어요';desc=last?.message||'최근 오류 원인을 확인해 주세요.';}
+  else if(!last||!hood){level='unknown';title='실행 상태를 아직 확인할 수 없어요';desc='최신 실행 또는 기기 상태 기록이 없습니다.';}
+  else if(isWaiting){level='warn';title='인덕션 OFF · 후드 종료 대기 중';desc='설정된 지연 시간이 지난 뒤 다음 예약 실행에서 OFF를 시도합니다.';}
+  else if(hood.desired!== 'UNKNOWN' && hood.confirmed!==hood.desired){level='warn';title='목표와 플러그 기록이 일치하지 않아요';desc='명령 수락 이후 물리 플러그 상태를 확인하지 않았거나 상태가 다른 경우입니다.';}
+  else if(last.action==='ALREADY_OFF'&&/Cached target matches/.test(last.message||'')){level='warn';title='OFF로 기록됐지만 실제 확인은 아니에요';desc='캐시 판단이므로 플러그 확인 시각을 참고하세요.';}
+  hero.dataset.level=level;set('summaryTitle',title);set('summaryText',desc);
+  set('sumAutomation',data.automationEnabled?'켜짐':'꺼짐');
+  set('sumInduction',hood?.induction||last?.induction||'UNKNOWN');
+  set('sumDesired',hood?.desired||'UNKNOWN');set('sumPlug',hood?.confirmed||'UNKNOWN');
+  set('sumAt',last?timeShort(last.time):'기록 없음');
+ }
  const clear=()=>{key='';storageRemove(localStorage,REMEMBER_KEY);storageRemove(sessionStorage,SESSION_KEY);$('remember').checked=false;$('token').value='';set('feedback','이 브라우저의 로그인 정보를 삭제했습니다.');$('switchOff').disabled=true;$('switchOn').disabled=true;set('storageState','—');set('readiness','—');set('readinessReasons','인증 후 확인');$('testStatus').disabled=true;$('testOn').disabled=true;$('testOff').disabled=true;$('resetBreaker').disabled=true;};
  $('clear').onclick=clear;
  async function changeSwitch(enabled){
@@ -188,7 +260,8 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
    set('induction',data.hood?.induction||'UNKNOWN');set('desired',data.hood?.desired||'UNKNOWN');
    set('verified',date(data.hood?.lastVerifiedAt));set('fails',data.hood?.failureCount??'—');
    rows('incidents',data.incidents,[x=>x.code,x=>date(x.lastSeenAt),x=>x.count]);
-   rows('history',data.history,[x=>date(x.time),x=>x.outcome,x=>x.action,x=>x.induction,x=>x.hood]);
+   lastHistory=data.history||[];
+   renderHistory();renderTimeline(data);renderSummary(data);
    set('feedback',data.partialData?'일부 모니터링 데이터 조회 실패: '+(data.warnings||[]).join(', '):'조회 완료 · 서버 기준 '+date(data.serverTime)+(data.storageEvidence?.latestRunFound?' · Blobs 실행 기록 확인 '+date(data.storageEvidence.latestRunAt):' · Blobs 실행 기록 없음'));
   }catch(e){set('overall','조회 실패');set('feedback',e.message);set('switchFeedback','운영 상태 조회 실패 · ON 버튼 비활성화')}
   finally{$('refresh').disabled=false;$('token').value=''}
