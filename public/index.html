@@ -60,6 +60,7 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
  const clear=()=>{key='';$('token').value='';set('feedback','관리자 토큰을 지웠습니다.');$('switchOff').disabled=true;$('switchOn').disabled=true;};
  $('clear').onclick=clear;
  async function changeSwitch(enabled){
+  if(enabled && $('switchOn').disabled){set('switchFeedback','ON 버튼이 잠긴 상태입니다. 운영 상태를 다시 조회하세요.');return}
   if(!key){set('switchFeedback','먼저 관리자 토큰으로 조회하세요.');return}
   if(enabled && !confirm('LG/Tuya 연동 및 API 사용량을 확인했나요? 자동화를 활성화하시겠습니까?'))return;
   if(!enabled && !confirm('자동 제어를 중지하시겠습니까? 현재 플러그 전원은 유지됩니다.'))return;
@@ -77,11 +78,24 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
  $('refresh').onclick=async()=>{
   const provided=$('token').value.trim();if(provided)key=provided;
   if(!key){set('feedback','관리자 토큰을 입력하세요.');return}
-  $('refresh').disabled=true;set('feedback','운영 상태를 조회하고 있습니다.');
+  $('refresh').disabled=true;$('switchOn').disabled=true;$('switchOff').disabled=true;set('feedback','운영 상태를 조회하고 있습니다.');
   try{
    const res=await fetch('/api/monitor-status',{headers:{'x-automation-token':key},cache:'no-store'});
    const data=await res.json();if(!res.ok)throw new Error(data.error||('HTTP '+res.status));
-   $('switchOff').disabled=false;$('switchOn').disabled=!data.canArmFromDashboard || data.partialData;set('switchFeedback',data.canArmFromDashboard?'인증 확인됨 · 자동화 ON 선택 가능':'ON 차단 사유: '+(data.armingBlockers||[]).join(', ')+(data.partialData?' · 모니터링 조회 오류':'') );
+   // Monitoring history/incident read failures must not silently disagree with arming eligibility.
+   // Quota usage/store failures are safety-relevant and keep ON disabled.
+   const criticalWarnings=(data.warnings||[]).filter(w=>['TUYA_USAGE_UNAVAILABLE','BLOBS_STORE_UNAVAILABLE'].includes(w));
+   const eligible=Boolean(data.canArmFromDashboard) && criticalWarnings.length===0;
+   $('switchOff').disabled=false;
+   $('switchOn').disabled=!eligible;
+   const blockers=[
+    ...(data.armingBlockers||[]),
+    ...criticalWarnings,
+   ];
+   set('switchFeedback',eligible
+    ? ((data.partialData ? '부가 모니터링 데이터 일부 조회 실패 · ' : '')+'자동화 ON 선택 가능')
+    : 'ON 잠금: '+(blockers.length?blockers.join(', '):'활성화 조건 확인 실패'));
+
    set('overall',data.status);set('mode',data.status);set('modeSub',data.commandsEnabled?'제어 허용':'명령 차단');
    set('last',data.latestRun?date(data.latestRun.time):'기록 없음');set('lastSub',data.latestRun?.action||'실행 기록 없음');
    set('quota',(data.tuya.attempts===null?'조회 실패':data.tuya.attempts)+' / '+data.tuya.limit);
@@ -91,7 +105,7 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
    rows('incidents',data.incidents,[x=>x.code,x=>date(x.lastSeenAt),x=>x.count]);
    rows('history',data.history,[x=>date(x.time),x=>x.outcome,x=>x.action,x=>x.induction,x=>x.hood]);
    set('feedback',data.partialData?'일부 모니터링 데이터 조회 실패: '+(data.warnings||[]).join(', '):'조회 완료 · 서버 기준 '+date(data.serverTime));
-  }catch(e){set('overall','조회 실패');set('feedback',e.message)}
+  }catch(e){set('overall','조회 실패');set('feedback',e.message);set('switchFeedback','운영 상태 조회 실패 · ON 버튼 비활성화')}
   finally{$('refresh').disabled=false;$('token').value=''}
  };
 })();
