@@ -75,8 +75,8 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
  const session=storageGet(sessionStorage,SESSION_KEY);
  key=remembered||session;
  $('remember').checked=Boolean(remembered);
- if(key)set('feedback','저장된 인증으로 자동 조회합니다.');
  const set=(id,value)=>{$(id).textContent=String(value??'—')};
+ if(key)set('feedback','저장된 인증으로 자동 조회합니다.');
  const date=value=>{if(!value)return '—';const d=new Date(typeof value==='number'?value:value);return Number.isNaN(d.getTime())?'—':d.toLocaleString('ko-KR')};
  const empty=(el,span)=>{el.replaceChildren();const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=span;td.textContent='기록 없음';tr.append(td);el.append(tr)};
  const rows=(id,items,keys)=>{const root=$(id);root.replaceChildren();if(!items.length){empty(root,keys.length);return}
