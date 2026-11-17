@@ -164,3 +164,11 @@ TUYA_DAILY_API_LIMIT=10
 중단 방법: Netlify `AUTOMATION_RESTART_APPROVED=false` (또는 `AUTOMATION_ENABLED=false`) 변경 후 새 운영 배포. 배포가 완료되기 전 진행 중인 호출은 취소할 수 없으므로 물리 기기나 Tuya 앱을 통한 직접 정지가 별도로 필요할 수 있습니다.
 
 Blobs 저장 검증: Function 로그에서 `monitoring_write_success`를 확인한 다음 관리자 대시보드 `storageEvidence.latestRunAt`이 최근 시각인지 확인합니다. 두 사실이 일치해야 저장/재조회 증거로 취급합니다.
+
+### 저장 읽기 검증 및 대시보드 상태 (2026-11-17)
+
+스케줄 함수가 PAUSED 상태에서 기존 `monitor/latest`를 **읽고** `monitoring_readback_verified`(마지막 기록 시각과 경과 초)을 로그에 남깁니다. 이어 `monitoring_write_success`를 출력합니다. 읽기 실패 시 `monitoring_readback_failed`를 남기며 기기 API 호출을 하지 않습니다.
+
+관리자 대시보드는 Blobs 최근 기록의 읽기 상태(정상/기록 지연/기록 없음/읽기 실패), 기록 시각, 자동화 제어 모드, 안전 재개 차단 이유를 표시합니다. 읽기가 정상이라는 사실만으로 Tuya Trial 한도나 실제 물리 장치 동작이 검증된 것은 아닙니다.
+
+실제 자동화 재개는 **보류**됩니다. 현재 Blobs 기반 호출 카운터는 동시성을 보장하지 않으며 정확한 API 호출 상한, LG 상태 매핑, 실물 후드 동작 및 즉시 중단 기능이 아직 검증되지 않았습니다.

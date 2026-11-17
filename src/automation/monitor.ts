@@ -32,3 +32,24 @@ export async function recordRun(outcome: MonitorOutcome, result?: AutomationResu
     return false;
   }
 }
+
+/**
+ * Read-only verification of previously persisted monitoring data.
+ * Uses the existing site-wide store and never calls external device providers.
+ * Eventual consistency can briefly return an older entry.
+ */
+export async function verifyRecordedRunReadback(now = new Date()): Promise<{readable:boolean; latestAt:string|null; ageSeconds:number|null}> {
+  try {
+    const previous = await store().get('monitor/latest', {type:'json',consistency:'eventual'}) as RunRecord | null;
+    if (!previous || !Number.isFinite(Date.parse(previous.time))) {
+      console.log(JSON.stringify({event:'monitoring_readback_unverified',reason:'NO_VALID_ENTRY'}));
+      return {readable:false,latestAt:null,ageSeconds:null};
+    }
+    const ageSeconds = Math.max(0,Math.round((now.getTime()-Date.parse(previous.time))/1000));
+    console.log(JSON.stringify({event:'monitoring_readback_verified',latestAt:previous.time,ageSeconds}));
+    return {readable:true,latestAt:previous.time,ageSeconds};
+  } catch (error) {
+    console.error(JSON.stringify({event:'monitoring_readback_failed',errorType:error instanceof Error?error.name:'UnknownError'}));
+    return {readable:false,latestAt:null,ageSeconds:null};
+  }
+}
