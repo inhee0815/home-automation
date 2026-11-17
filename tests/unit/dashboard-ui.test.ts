@@ -42,3 +42,31 @@ test('logout clears persistent and session tokens',()=>{
  expect(html).toContain("storageRemove(localStorage,REMEMBER_KEY);storageRemove(sessionStorage,SESSION_KEY)");
  expect(html).toContain("if(key)$('refresh').click()");
 });
+
+test('restored login executes page script and immediately attempts authenticated refresh',async()=>{
+ const {runInNewContext}=require('node:vm');
+ const script=html.split('<script>')[1]?.split('</script>')[0];
+ expect(script).toBeTruthy();
+ const controls=new Map<string,any>();
+ const el=(id:string)=>{
+   if(!controls.has(id))controls.set(id,{
+     value:'',checked:false,disabled:false,textContent:'',
+     click(){if(typeof this.onclick==='function')return this.onclick();},
+     replaceChildren(){},append(){},
+   });
+   return controls.get(id);
+ };
+ const storage=(entries:Record<string,string>={})=>{
+   const data=new Map(Object.entries(entries));
+   return {getItem:(k:string)=>data.get(k)||null,setItem:(k:string,v:string)=>data.set(k,v),removeItem:(k:string)=>data.delete(k)};
+ };
+ const localStorage=storage({hood_dashboard_remembered_token:'stored-test-token'});
+ const sessionStorage=storage();
+ const fetch=jest.fn().mockResolvedValue({ok:false,status:401,json:async()=>({error:'Unauthorized'})});
+ const document={getElementById:el,createElement:()=>({append(){},textContent:'',colSpan:0})};
+ expect(()=>runInNewContext(script!,{document,localStorage,sessionStorage,fetch,confirm:()=>false,console})).not.toThrow();
+ expect(el('remember').checked).toBe(true);
+ expect(fetch).toHaveBeenCalledWith('/api/monitor-status',expect.objectContaining({
+   headers:{'x-automation-token':'stored-test-token'},
+ }));
+});
