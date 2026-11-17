@@ -67,7 +67,7 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
   try{
    const res=await fetch('/api/automation-switch',{method:'POST',headers:{'x-automation-token':key,'Content-Type':'application/json'},body:JSON.stringify({enabled})});
    const data=await res.json();
-   if(!res.ok)throw new Error(data.error||'Failed');
+   if(!res.ok)throw new Error((data.error||'Failed')+(data.blockers?.length?' ('+data.blockers.join(', ')+')':''));
    set('switchFeedback',data.enabled?'자동화 ON 요청 반영':'자동화 OFF 요청 반영');
   }catch(e){set('switchFeedback',e.message)}
   $('refresh').click();
@@ -81,7 +81,7 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
   try{
    const res=await fetch('/api/monitor-status',{headers:{'x-automation-token':key},cache:'no-store'});
    const data=await res.json();if(!res.ok)throw new Error(data.error||('HTTP '+res.status));
-   $('switchOff').disabled=false;$('switchOn').disabled=!data.canArmFromDashboard || data.partialData;set('switchFeedback',data.canArmFromDashboard?'인증 확인됨 · 운영 안전 조건 승인 필요':'현재 배포 설정에서는 ON 전환이 금지되어 있습니다.');
+   $('switchOff').disabled=false;$('switchOn').disabled=!data.canArmFromDashboard || data.partialData;set('switchFeedback',data.canArmFromDashboard?'인증 확인됨 · 자동화 ON 선택 가능':'ON 차단 사유: '+(data.armingBlockers||[]).join(', ')+(data.partialData?' · 모니터링 조회 오류':'') );
    set('overall',data.status);set('mode',data.status);set('modeSub',data.commandsEnabled?'제어 허용':'명령 차단');
    set('last',data.latestRun?date(data.latestRun.time):'기록 없음');set('lastSub',data.latestRun?.action||'실행 기록 없음');
    set('quota',(data.tuya.attempts===null?'조회 실패':data.tuya.attempts)+' / '+data.tuya.limit);

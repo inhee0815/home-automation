@@ -3,7 +3,7 @@ import { getStore } from '@netlify/blobs';
 import crypto from 'crypto';
 import type { HoodState } from '../../src/automation/stateStore';
 import type { RunRecord } from '../../src/automation/monitor';
-import { runtimeEnabled, mayArmFromDashboard } from '../../src/automation/runtimeSwitch';
+import { runtimeEnabled, mayArmFromDashboard, armingBlockers } from '../../src/automation/runtimeSwitch';
 
 const headers = {
   'Content-Type': 'application/json; charset=utf-8',
@@ -56,7 +56,7 @@ export const handler: Handler = async (event) => {
     }
   }
 
-  const [active, canArm] = await Promise.all([runtimeEnabled(),Promise.resolve(mayArmFromDashboard())]);
+  const [active, canArm] = await Promise.all([runtimeEnabled(),Promise.resolve(mayArmFromDashboard(event.headers.host))]);
   const today = new Date().toISOString().slice(0, 10);
   const s = store;
   const [run, hood, usage, incidents, historyKeys] = await Promise.all([
@@ -91,7 +91,7 @@ export const handler: Handler = async (event) => {
     headers,
     body: JSON.stringify({
       serverTime: new Date().toISOString(),
-      automationEnabled: active, canArmFromDashboard: canArm,
+      automationEnabled: active, canArmFromDashboard: canArm, armingBlockers: armingBlockers(event.headers.host),
       commandsEnabled: process.env.TUYA_COMMANDS_ENABLED === 'true',
       status, partialData: warnings.length > 0, warnings,
       latestRun: run,

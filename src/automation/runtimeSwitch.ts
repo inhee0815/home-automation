@@ -14,10 +14,28 @@ export function deploymentAllowsRun(): boolean {
     && process.env.TUYA_COMMANDS_ENABLED === 'true'
     && process.env.TUYA_QUOTA_GUARD_ENABLED === 'true';
 }
-export function mayArmFromDashboard(): boolean {
-  return deploymentAllowsRun()
-    && process.env.ENABLE_DASHBOARD_ARMING === 'true'
-    && process.env.CONTEXT === 'production';
+const PRODUCTION_SITE_ID = '178acf14-19c5-40c9-b50e-3a11162a0412';
+const PRODUCTION_HOST = 'sweethome-automation.netlify.app';
+function isProductionRequest(host?: string): boolean {
+  const environment = process.env.CONTEXT;
+  // CONTEXT is Netlify build-only and is not guaranteed inside Functions.
+  // SITE_ID and URL are documented runtime read-only values.
+  if (environment && environment !== 'production') return false;
+  return process.env.SITE_ID === PRODUCTION_SITE_ID
+    && process.env.URL === 'https://' + PRODUCTION_HOST
+    && host?.toLowerCase() === PRODUCTION_HOST;
+}
+export function armingBlockers(host?: string): string[] {
+  const blockers: string[] = [];
+  if (process.env.AUTOMATION_ENABLED !== 'true') blockers.push('AUTOMATION_DISABLED');
+  if (process.env.TUYA_COMMANDS_ENABLED !== 'true') blockers.push('TUYA_COMMANDS_DISABLED');
+  if (process.env.TUYA_QUOTA_GUARD_ENABLED !== 'true') blockers.push('QUOTA_GUARD_DISABLED');
+  if (process.env.ENABLE_DASHBOARD_ARMING !== 'true') blockers.push('DASHBOARD_ARMING_DISABLED');
+  if (!isProductionRequest(host)) blockers.push('NOT_PRODUCTION_SITE');
+  return blockers;
+}
+export function mayArmFromDashboard(host?: string): boolean {
+  return armingBlockers(host).length === 0;
 }
 export async function runtimeEnabled(): Promise<boolean> {
   // Never read LG / Tuya when a deployment-level guard is off.
@@ -30,8 +48,8 @@ export async function runtimeEnabled(): Promise<boolean> {
     return false;
   }
 }
-export async function setRuntimeSwitch(enabled: boolean): Promise<RuntimeSwitch> {
-  if (enabled && !mayArmFromDashboard()) throw new Error('ARMING_NOT_PERMITTED');
+export async function setRuntimeSwitch(enabled: boolean, host?: string): Promise<RuntimeSwitch> {
+  if (enabled && !mayArmFromDashboard(host)) throw new Error('ARMING_NOT_PERMITTED');
   const state: RuntimeSwitch = {enabled,updatedAt:new Date().toISOString()};
   await store().setJSON('control/runtime-switch',state);
   return state;
