@@ -1,3 +1,4 @@
+import { connectLambda } from '@netlify/blobs';
 import type { Handler, HandlerResponse } from '@netlify/functions';
 import { TuyaClient } from '../../src/tuya/client';
 

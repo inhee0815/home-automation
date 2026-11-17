@@ -1,8 +1,10 @@
+import { connectLambda } from '@netlify/blobs';
 import type {Handler} from '@netlify/functions';
 import { sendDirectPlugCommand } from '../../src/tuya/directCommand';
 import { runtimeEnabled } from '../../src/automation/runtimeSwitch';
 
-export const handler: Handler = async event => {
+export const handler: Handler = async (event) => {
+  connectLambda(event as unknown as Parameters<typeof connectLambda>[0]);
   if (event.httpMethod !== 'POST') return {statusCode: 405, body: 'Method Not Allowed'};
   if (process.env.TUYA_COMMANDS_ENABLED !== 'true' || process.env.MANUAL_AUTOMATION_ENABLED !== 'true')
     return {statusCode: 403, body: 'Manual control disabled'};

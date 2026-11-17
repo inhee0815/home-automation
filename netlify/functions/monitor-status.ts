@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import { getStore } from '@netlify/blobs';
+import { getStore, connectLambda } from '@netlify/blobs';
 import crypto from 'crypto';
 import type { HoodState } from '../../src/automation/stateStore';
 import type { RunRecord } from '../../src/automation/monitor';
@@ -24,6 +24,7 @@ function authorized(input?: string): boolean {
 }
 
 export const handler: Handler = async (event) => {
+  connectLambda(event as unknown as Parameters<typeof connectLambda>[0]);
   if (event.httpMethod !== 'GET')
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
   if (!process.env.AUTOMATION_ADMIN_TOKEN)

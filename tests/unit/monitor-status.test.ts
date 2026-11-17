@@ -1,4 +1,4 @@
-jest.mock('@netlify/blobs', () => ({ getStore: jest.fn() }));
+jest.mock('@netlify/blobs', () => ({ getStore: jest.fn(), connectLambda: jest.fn() }));
 import { getStore } from '@netlify/blobs';
 import { handler } from '../../netlify/functions/monitor-status';
 import { runtimeEnabled,mayArmFromDashboard,armingBlockers } from '../../src/automation/runtimeSwitch';

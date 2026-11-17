@@ -1,4 +1,4 @@
-jest.mock('@netlify/blobs',()=>({getStore:jest.fn()}));
+jest.mock('@netlify/blobs',()=>({getStore:jest.fn(),connectLambda:jest.fn()}));
 import {getStore} from '@netlify/blobs';
 import {runtimeEnabled,setRuntimeSwitch,mayArmFromDashboard} from '../../src/automation/runtimeSwitch';
 import {handler} from '../../netlify/functions/automation-switch';

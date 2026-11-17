@@ -128,3 +128,9 @@ npm run dev
 Netlify Functions 런타임에서 `CONTEXT`는 문서상 보장되지 않습니다. 따라서 `SITE_ID`, `URL` (공식 read-only 런타임 변수) 및 요청 Host가 운영 사이트와 일치하는지 확인합니다. `CONTEXT`가 존재할 때만 추가 검사합니다. 배포 프리뷰에서는 활성화할 수 없습니다.
 
 대시보드가 `armingBlockers`를 보여주며 각각의 비활성화 조건을 구분합니다. `partialData=true`이면 ON 버튼을 잠그는 설정은 유지합니다. 관리자 인증 없이는 이 진단 정보를 반환하지 않습니다.
+
+### Netlify Blobs Lambda Compatibility Fix
+
+All existing named `handler` functions use the Lambda compatibility format, which does **not** automatically connect Netlify Blobs. Each function needing Blobs now invokes `connectLambda(event)` before accessing `getStore()`. The scheduled function initializes it at the start of each invocation. The runtime switch stays fail-closed until a valid persisted ON state exists.
+
+The diagnostic logs now emit only error class and operation, never tokens or provider error messages. After deploying, inspect `scheduled-automation` logs for `netlify_blobs_error` and check whether the dashboard displays valid monitoring history. Do not arm automation until this succeeds and the Tuya trial quota is verified.

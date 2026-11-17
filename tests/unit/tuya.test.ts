@@ -4,6 +4,7 @@ import { handler as tuyaStatusHandler } from '../../netlify/functions/tuya-statu
 import { handler as tuyaControlHandler } from '../../netlify/functions/tuya-control';
 
 jest.mock('axios');
+jest.mock('@netlify/blobs', () => ({ connectLambda: jest.fn(), getStore: jest.fn() }));
 jest.mock('../../src/tuya/quota', () => ({ reserveTuyaApiAttempt: jest.fn(async () => undefined) }));
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
