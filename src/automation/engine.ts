@@ -59,6 +59,32 @@ export class AutomationEngine {
     }
     next.desired = target;
 
+    // Cached plug state can be stale after manual control. On every actual
+    // target transition, verify the physical Tuya switch before deciding.
+    if (state.desired !== 'UNKNOWN' && state.desired !== target) {
+      try {
+        const observed = await this.tuyaClient.getStatus();
+        if (!observed.online || typeof observed.switch_1 !== 'boolean')
+          throw new Error('Tuya device offline or switch status unavailable');
+        next.confirmed = observed.switch_1 ? 'ON' : 'OFF';
+        next.lastVerifiedAt = now;
+        if (next.confirmed === target) {
+          next.failureCount = 0;
+          next.nextRetryAt = 0;
+          await this.store.save(next);
+          return result(target === 'ON' ? 'ALREADY_ON' : 'ALREADY_OFF', induction, target, 'Verified plug already matches new target.');
+        }
+        if (state.failureCount < 3) next.nextRetryAt = 0;
+      } catch (error) {
+        next.confirmed = 'UNKNOWN';
+        next.lastFailureReason = classifyTuyaFailure(error);
+        next.lastFailureAt = now;
+        next.nextRetryAt = now + retryMs();
+        await this.store.save(next);
+        return result('SKIPPED_TUYA_ERROR', induction, 'UNKNOWN', 'Target change verification failed; no command.');
+      }
+    }
+
     // One initial status read, never a read on every scheduled invocation.
     if (state.desired === 'UNKNOWN' && state.confirmed === 'UNKNOWN') {
       try {
@@ -75,7 +101,7 @@ export class AutomationEngine {
     const verifyDue = process.env.TUYA_PERIODIC_VERIFY === 'true'
       && (!state.lastVerifiedAt || now - state.lastVerifiedAt >= verificationMs());
 
-    if (state.confirmed === target && !verifyDue) {
+    if (next.confirmed === target && !verifyDue) {
       await this.store.save(next);
       return result(target === 'ON' ? 'ALREADY_ON' : 'ALREADY_OFF', induction, target, 'Cached target matches; no Tuya API request.');
     }
@@ -104,27 +130,6 @@ export class AutomationEngine {
       await this.store.save(next);
       return result('SKIPPED_TUYA_ERROR', induction, state.confirmed, 'Circuit breaker open; manual reset required. Last failure: '+(state.lastFailureReason||'UNKNOWN'));
     }
-    // When an OFF cooldown is pending, a new ON target must not be blocked by
-    // that previous target. Verify the physical plug before issuing ON.
-    if (target === 'ON' && state.desired === 'OFF' && now < state.nextRetryAt) {
-      try {
-        const observed = await this.tuyaClient.getStatus();
-        if (!observed.online) throw new Error('Tuya device offline');
-        next.lastVerifiedAt = now;
-        next.confirmed = observed.switch_1 ? 'ON' : 'OFF';
-        next.nextRetryAt = 0;
-        if (next.confirmed === 'ON') {
-          next.failureCount = 0;
-          await this.store.save(next);
-          return result('ALREADY_ON', induction, 'ON', 'ON target: plug already ON; previous OFF cooldown cleared.');
-        }
-        await this.store.save(next);
-      } catch {
-        next.nextRetryAt = now + retryMs();
-        await this.store.save(next);
-        return result('SKIPPED_TUYA_ERROR', induction, 'UNKNOWN', 'New ON target verification failed; retry delayed.');
-      }
-    }
     if (now < next.nextRetryAt) {
       await this.store.save(next);
       return result('SKIPPED_TUYA_ERROR', induction, state.confirmed, 'Command cooldown/backoff active.');
@@ -144,12 +149,22 @@ export class AutomationEngine {
         }
       }
       if (!(await runtimeEnabled())) return result('SKIPPED_TUYA_ERROR', induction, next.confirmed, 'Runtime interlock is off.');
+      // Check LG again just before sending a physical command. The induction
+      // may have changed while Tuya was queried or between scheduler ticks.
+      let freshLg;
+      try { freshLg = await this.lgClient.getCooktopStatus(); }
+      catch { await this.store.save(next); return result('SKIPPED_LG_ERROR', 'UNKNOWN', next.confirmed, 'Final LG check failed; command cancelled.'); }
+      if (!freshLg.online || freshLg.powerState === 'UNKNOWN' ||
+          (freshLg.isOperating ? 'ON' : 'OFF') !== induction) {
+        await this.store.save(next);
+        return result('SKIPPED_LG_ERROR', 'UNKNOWN', next.confirmed, 'Induction changed during evaluation; command cancelled.');
+      }
       await sendDirectPlugCommand(target === 'ON');
       next.confirmed = 'UNKNOWN'; // Accepted != physically confirmed.
       next.lastCommandAt = now;
       next.lastVerifiedAt = null;
       next.failureCount = 0;
-      next.nextRetryAt = now + retryMs();
+      next.nextRetryAt = now + 60_000;
       await this.store.save(next);
       return result(target === 'ON' ? 'TURN_ON' : 'TURN_OFF', induction, 'UNKNOWN', 'Tuya command accepted; physical state unverified.', true);
     } catch (error) {
