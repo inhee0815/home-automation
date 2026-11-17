@@ -22,13 +22,13 @@ const store = () => getStore({
  */
 export function deploymentAllowsRun(): boolean {
   // The operator explicitly authorized live automation. A deployment can run
-  // only with all three existing allow flags, a conservative request budget,
+  // only with all three existing allow flags and configured request budget,
   // and a recognized production Netlify site. No Blob toggle authorizes calls.
-  const budget = Number(process.env.TUYA_DAILY_API_LIMIT ?? '8');
+  const budget = Number(process.env.TUYA_DAILY_API_LIMIT ?? '100');
   return process.env.AUTOMATION_ENABLED === 'true'
     && process.env.TUYA_COMMANDS_ENABLED === 'true'
     && process.env.TUYA_QUOTA_GUARD_ENABLED === 'true'
-    && Number.isSafeInteger(budget) && budget >= 1 && budget <= 8
+    && Number.isSafeInteger(budget) && budget >= 1 && budget <= 1000
     && process.env.SITE_ID === PRODUCTION_SITE_ID
     && process.env.URL === 'https://' + PRODUCTION_HOST
     && (!process.env.CONTEXT || process.env.CONTEXT === 'production');
@@ -56,8 +56,8 @@ export function armingBlockers(host?: string): string[] {
   if (process.env.LIVE_TEST_ENABLED !== 'true') blockers.push('MANUAL_TEST_DISABLED');
 
 
-  const budget = Number(process.env.TUYA_DAILY_API_LIMIT ?? 8);
-  if (!Number.isSafeInteger(budget) || budget < 1 || budget > 8) blockers.push('INVALID_DAILY_BUDGET');
+  const budget = Number(process.env.TUYA_DAILY_API_LIMIT ?? 100);
+  if (!Number.isSafeInteger(budget) || budget < 1 || budget > 1000) blockers.push('INVALID_DAILY_BUDGET');
   if (process.env.AUTOMATION_ENABLED !== 'true') blockers.push('AUTOMATION_DISABLED');
   if (process.env.TUYA_COMMANDS_ENABLED !== 'true') blockers.push('TUYA_COMMANDS_DISABLED');
   if (process.env.TUYA_QUOTA_GUARD_ENABLED !== 'true') blockers.push('QUOTA_GUARD_DISABLED');

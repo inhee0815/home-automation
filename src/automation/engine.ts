@@ -103,7 +103,28 @@ export class AutomationEngine {
       await this.store.save(next);
       return result('SKIPPED_TUYA_ERROR', induction, state.confirmed, 'Circuit breaker open; manual reset required.');
     }
-    if (now < state.nextRetryAt) {
+    // When an OFF cooldown is pending, a new ON target must not be blocked by
+    // that previous target. Verify the physical plug before issuing ON.
+    if (target === 'ON' && state.desired === 'OFF' && now < state.nextRetryAt) {
+      try {
+        const observed = await this.tuyaClient.getStatus();
+        if (!observed.online) throw new Error('Tuya device offline');
+        next.lastVerifiedAt = now;
+        next.confirmed = observed.switch_1 ? 'ON' : 'OFF';
+        next.nextRetryAt = 0;
+        if (next.confirmed === 'ON') {
+          next.failureCount = 0;
+          await this.store.save(next);
+          return result('ALREADY_ON', induction, 'ON', 'ON target: plug already ON; previous OFF cooldown cleared.');
+        }
+        await this.store.save(next);
+      } catch {
+        next.nextRetryAt = now + retryMs();
+        await this.store.save(next);
+        return result('SKIPPED_TUYA_ERROR', induction, 'UNKNOWN', 'New ON target verification failed; retry delayed.');
+      }
+    }
+    if (now < next.nextRetryAt) {
       await this.store.save(next);
       return result('SKIPPED_TUYA_ERROR', induction, state.confirmed, 'Command cooldown/backoff active.');
     }

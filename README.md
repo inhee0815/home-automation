@@ -199,3 +199,8 @@ LG 상태 파서는 알려진 상태 및 버너 전력 신호가 없으면 **UNK
 ## Live automatic control (2026-11-17)
 At the operator's explicit request the hard-coded `return false` in `deploymentAllowsRun` was replaced with a production-only deployment gate. With existing `AUTOMATION_ENABLED=true`, `TUYA_COMMANDS_ENABLED=true`, `TUYA_QUOTA_GUARD_ENABLED=true` and `TUYA_DAILY_API_LIMIT=1..8` (default 8), the published production Scheduled Function evaluates LG each minute. Pausing requires setting `AUTOMATION_ENABLED=false` and redeploying. Preview deployments remain blocked.
 **Risk:** Netlify Blobs eventual-consistency quota reservations are not a strict global cap; the current Tuya Trial account remaining quota is not independently verified. This is a live physical appliance control. Review all commands and logs; stop from the Tuya app or device if needed. Observing a Tuya POST success does not verify hood fan motion.
+
+## 2026-11-17: ON transition and Tuya request budget
+- Removed the fixed 8-call local ceiling. Default local daily budget is 100 attempts; configurable via TUYA_DAILY_API_LIMIT (1–1000). This is not a provider-granted API quota or a strict concurrency-safe cap; Netlify Blobs may lose increments under concurrent requests.
+- A newly required ON state after an OFF cooldown first verifies Tuya plug status. If plug is OFF, the prior OFF cooldown is cleared and ON is sent; if already ON, no command; if status cannot be verified, command remains blocked.
+- Same-target retries, failure circuit breaker and 90-second OFF delay are retained. Device operation must be physically verified.
