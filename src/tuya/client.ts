@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import axios, { AxiosInstance } from 'axios';
 import dotenv from 'dotenv';
+import { reserveTuyaApiAttempt } from './quota';
 import {
   TuyaConfig,
   TuyaDeviceInfo,
@@ -31,6 +32,10 @@ export class TuyaClient {
     this.axiosInstance = axios.create({
       baseURL: this.config.endpoint,
       timeout: 10000,
+    });
+    this.axiosInstance.interceptors.request.use(async req => {
+      await reserveTuyaApiAttempt();
+      return req;
     });
   }
 

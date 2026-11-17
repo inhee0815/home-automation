@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import axios from 'axios';
+import { reserveTuyaApiAttempt } from './quota';
 
 // Issue a Tuya command without a preflight device-status GET.
 let cachedToken: {value: string; expiresAt: number} | null = null;
@@ -17,6 +18,7 @@ function signHeaders(method: string, path: string, body: string, token = '') {
 async function accessToken(): Promise<string> {
   if (cachedToken && cachedToken.expiresAt - Date.now() > 60000) return cachedToken.value;
   const path = '/v1.0/token?grant_type=1';
+  await reserveTuyaApiAttempt();
   const res = await axios.get(endpoint() + path, {headers: signHeaders('GET', path, ''), timeout: 10000});
   if (!res.data?.success) throw new Error('Tuya access-token request failed');
   cachedToken = {value: res.data.result.access_token, expiresAt: Date.now() + Number(res.data.result.expire_time || 7200) * 1000};
@@ -28,6 +30,7 @@ export async function sendDirectPlugCommand(on: boolean): Promise<void> {
   const path = `/v1.0/devices/${deviceId}/commands`;
   const body = JSON.stringify({commands: [{code: 'switch_1', value: on}]});
   const token = await accessToken();
+  await reserveTuyaApiAttempt();
   const res = await axios.post(endpoint() + path, body, {
     headers: {...signHeaders('POST', path, body, token), 'Content-Type': 'application/json'},
     timeout: 10000,

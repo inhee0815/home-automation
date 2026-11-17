@@ -76,3 +76,11 @@ npm run dev
 3. 스케줄 실행 겹침, 수동 명령과 자동 명령의 경합을 엄격히 막으려면 트랜잭션 기반 실행 잠금이 필요합니다.
 4. 상태 저장에 실패하거나 명령 응답이 유실되면 실제 기기 상태는 불명확해질 수 있습니다.
 5. 자동화 플래그를 활성화하기 전에 빌드·테스트·리소스 사용량과 실제 후드 동작을 검증하세요.
+
+## Tuya API usage monitoring and budget (review branch)
+
+- Set `TUYA_QUOTA_GUARD_ENABLED=true` **only after** verifying Netlify Blobs access. Otherwise all Tuya API calls made through the modified clients fail closed.
+- `TUYA_DAILY_API_LIMIT=20` (default): conservative daily request reservation threshold, **including token requests, status reads, and commands** from the modified Tuya clients.
+- Usage entries: Netlify Blobs `AUTOMATION_BLOB_STORE` / `tuya-api/YYYY-MM-DD`. Logs contain `tuya_api_attempt_reserved`, attempts and limit. Dates are UTC. These are attempted calls, **not vendor-billed confirmed usage**.
+- **Not a strict contractual hard cap:** Blobs has no transactional counter/lock; overlapping invocations and out-of-band API calls can violate the effective limit. A DB transaction or single-writer queue is required for a provable hard cap.
+- `TUYA_QUOTA_GUARD_ENABLED`, `AUTOMATION_ENABLED`, `TUYA_COMMANDS_ENABLED` all default disabled. Do not turn any of them on until the CI build, actual-device status mapping, access controls and concurrency strategy are verified.
