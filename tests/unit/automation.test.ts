@@ -1,6 +1,8 @@
 import { AutomationEngine } from '../../src/automation/engine';
 import { sendDirectPlugCommand } from '../../src/tuya/directCommand';
 import { HoodState } from '../../src/automation/stateStore';
+import { runtimeEnabled } from '../../src/automation/runtimeSwitch';
+jest.mock('../../src/automation/runtimeSwitch', () => ({runtimeEnabled:jest.fn()}));
 
 jest.mock('../../src/tuya/directCommand', () => ({sendDirectPlugCommand: jest.fn(async () => undefined)}));
 const command = sendDirectPlugCommand as jest.Mock;
@@ -20,12 +22,14 @@ function setup(status: any, initial: HoodState | null) {
 }
 beforeEach(() => {
   jest.clearAllMocks();
+  (runtimeEnabled as jest.Mock).mockResolvedValue(true);
   process.env.AUTOMATION_ENABLED = 'true';
   process.env.TUYA_COMMANDS_ENABLED = 'true';
   delete process.env.TUYA_PERIODIC_VERIFY;
 });
 test('disabled automation never makes external calls', async () => {
   process.env.AUTOMATION_ENABLED = 'false';
+  (runtimeEnabled as jest.Mock).mockResolvedValue(false);
   const s = setup(on, baseline());
   await s.engine.evaluateAndExecute(200000);
   expect(s.lg.getCooktopStatus).not.toHaveBeenCalled();
