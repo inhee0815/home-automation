@@ -15,12 +15,20 @@ const store = () => getStore({
   name: process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod',
   consistency: 'eventual',
 });
-// Runtime OFF changes need immediate visibility, which current Blobs deployment cannot guarantee.
-// Never allow device control using an eventually-consistent mutable ON/OFF record.
+/**
+ * Deploy-only gate: immutable for the duration of a published function deployment.
+ * No eventually-consistent Blob is used to authorize LG/Tuya calls.
+ * All new approval flags default to OFF.
+ */
 export function deploymentAllowsRun(): boolean {
-  return false && process.env.AUTOMATION_ENABLED === 'true'
+  const budget = Number(process.env.TUYA_DAILY_API_LIMIT ?? '20');
+  return process.env.AUTOMATION_CONTROL_MODE === 'deploy'
+    && process.env.AUTOMATION_RESTART_APPROVED === 'true'
+    && process.env.TUYA_TRIAL_QUOTA_VERIFIED === 'true'
+    && process.env.AUTOMATION_ENABLED === 'true'
     && process.env.TUYA_COMMANDS_ENABLED === 'true'
-    && process.env.TUYA_QUOTA_GUARD_ENABLED === 'true';
+    && process.env.TUYA_QUOTA_GUARD_ENABLED === 'true'
+    && Number.isSafeInteger(budget) && budget >= 1 && budget <= 20;
 }
 const PRODUCTION_SITE_ID = '178acf14-19c5-40c9-b50e-3a11162a0412';
 const PRODUCTION_HOST = 'sweethome-automation.netlify.app';
@@ -34,7 +42,12 @@ function isProductionRequest(host?: string): boolean {
     && host?.toLowerCase() === PRODUCTION_HOST;
 }
 export function armingBlockers(host?: string): string[] {
-  const blockers: string[] = ['RUNTIME_INTERLOCK_STRONG_CONSISTENCY_UNAVAILABLE'];
+  const blockers: string[] = ['DASHBOARD_ON_UNSUPPORTED_USE_DEPLOY_CONTROL'];
+  if (process.env.AUTOMATION_CONTROL_MODE !== 'deploy') blockers.push('DEPLOY_CONTROL_MODE_REQUIRED');
+  if (process.env.AUTOMATION_RESTART_APPROVED !== 'true') blockers.push('RESTART_REVIEW_REQUIRED');
+  if (process.env.TUYA_TRIAL_QUOTA_VERIFIED !== 'true') blockers.push('TUYA_TRIAL_QUOTA_UNVERIFIED');
+  const budget = Number(process.env.TUYA_DAILY_API_LIMIT ?? 20);
+  if (!Number.isSafeInteger(budget) || budget < 1 || budget > 20) blockers.push('INVALID_DAILY_BUDGET');
   if (process.env.AUTOMATION_ENABLED !== 'true') blockers.push('AUTOMATION_DISABLED');
   if (process.env.TUYA_COMMANDS_ENABLED !== 'true') blockers.push('TUYA_COMMANDS_DISABLED');
   if (process.env.TUYA_QUOTA_GUARD_ENABLED !== 'true') blockers.push('QUOTA_GUARD_DISABLED');
@@ -46,17 +59,11 @@ export function mayArmFromDashboard(host?: string): boolean {
   return armingBlockers(host).length === 0;
 }
 export async function runtimeEnabled(): Promise<boolean> {
-  // Never read LG / Tuya when a deployment-level guard is off.
-  if (!deploymentAllowsRun()) return false;
-  try {
-    const state = await store().get('control/runtime-switch', {type:'json',consistency:'eventual'}) as RuntimeSwitch | null;
-    return state?.enabled === true;
-  } catch (error) {
-    logBlobFailure('runtime_switch_read',error);
-    return false;
-  }
+  // Read no mutable state to authorize device control. Only immutable deploy config.
+  return deploymentAllowsRun();
 }
 export async function setRuntimeSwitch(enabled: boolean, host?: string): Promise<RuntimeSwitch> {
+  if (process.env.AUTOMATION_CONTROL_MODE === 'deploy') throw new Error('DEPLOY_CONTROL_ONLY');
   if (enabled && !mayArmFromDashboard(host)) throw new Error('ARMING_NOT_PERMITTED');
   const state: RuntimeSwitch = {enabled,updatedAt:new Date().toISOString()};
   await store().setJSON('control/runtime-switch',state);

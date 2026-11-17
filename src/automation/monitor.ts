@@ -12,7 +12,7 @@ export interface RunRecord {
 function store() {
   return getStore({name:process.env.AUTOMATION_BLOB_STORE || 'home-automation-prod',consistency:'eventual'});
 }
-export async function recordRun(outcome: MonitorOutcome, result?: AutomationResult): Promise<void> {
+export async function recordRun(outcome: MonitorOutcome, result?: AutomationResult): Promise<boolean> {
   const now = new Date();
   const entry: RunRecord = {
     time:now.toISOString(),outcome,action:result?.action || outcome,
@@ -25,7 +25,10 @@ export async function recordRun(outcome: MonitorOutcome, result?: AutomationResu
     if (outcome !== 'OK' || now.getUTCMinutes()%15 === 0) {
       await s.setJSON('monitor/runs/'+now.toISOString()+'-'+Math.random().toString(36).slice(2,8),entry);
     }
+    console.log(JSON.stringify({event:'monitoring_write_success',outcome,time:entry.time}));
+    return true;
   } catch (error) {
     console.error(JSON.stringify({event:'netlify_blobs_error',operation:'monitoring_write',errorType:error instanceof Error ? error.name : 'UnknownError'}));
+    return false;
   }
 }

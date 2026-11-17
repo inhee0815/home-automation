@@ -10,6 +10,7 @@ beforeEach(()=>{
  process.env.AUTOMATION_ADMIN_TOKEN='admin';
  delete process.env.AUTOMATION_ENABLED;delete process.env.TUYA_COMMANDS_ENABLED;delete process.env.TUYA_QUOTA_GUARD_ENABLED;
  delete process.env.ENABLE_DASHBOARD_ARMING;delete process.env.CONTEXT;delete process.env.SITE_ID;delete process.env.URL;
+ delete process.env.AUTOMATION_CONTROL_MODE;delete process.env.AUTOMATION_RESTART_APPROVED;delete process.env.TUYA_TRIAL_QUOTA_VERIFIED;
 });
 test('absent runtime state fails closed',async()=>{
  process.env.AUTOMATION_ENABLED='true';process.env.TUYA_COMMANDS_ENABLED='true';process.env.TUYA_QUOTA_GUARD_ENABLED='true';
@@ -37,10 +38,10 @@ test('bad token cannot change runtime state',async()=>{
  expect(response.statusCode).toBe(401);
  expect(store.setJSON).not.toHaveBeenCalled();
 });
-test('ON is blocked when runtime switch lacks strong consistency',async()=>{
+test('dashboard ON is blocked in deploy-only control mode',async()=>{
  Object.assign(process.env,{AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',ENABLE_DASHBOARD_ARMING:'true',SITE_ID:'178acf14-19c5-40c9-b50e-3a11162a0412',URL:'https://sweethome-automation.netlify.app'});
  expect(mayArmFromDashboard('sweethome-automation.netlify.app')).toBe(false);
- expect(armingBlockers('sweethome-automation.netlify.app')).toContain('RUNTIME_INTERLOCK_STRONG_CONSISTENCY_UNAVAILABLE');
+ expect(armingBlockers('sweethome-automation.netlify.app')).toContain('DASHBOARD_ON_UNSUPPORTED_USE_DEPLOY_CONTROL');
  const response=await request(true);
  expect(response.statusCode).toBe(409);
  expect(store.setJSON).not.toHaveBeenCalled();
@@ -52,4 +53,21 @@ test('preview host cannot arm even with production site env',async()=>{
  expect(response.statusCode).toBe(409);
  expect(JSON.parse(response.body).blockers).toContain('NOT_PRODUCTION_SITE');
  expect(store.setJSON).not.toHaveBeenCalled();
+});
+
+test('deploy-only explicit review enables runtime without Blob read', async()=>{
+ Object.assign(process.env,{AUTOMATION_CONTROL_MODE:'deploy',AUTOMATION_RESTART_APPROVED:'true',TUYA_TRIAL_QUOTA_VERIFIED:'true',AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',TUYA_DAILY_API_LIMIT:'10'});
+ expect(await runtimeEnabled()).toBe(true);
+ expect(store.get).not.toHaveBeenCalled();
+ const controlResponse=await request(false);
+ expect(controlResponse.statusCode).toBe(409);
+ expect(store.setJSON).not.toHaveBeenCalled();
+});
+test('unreviewed trial quota blocks network calls',async()=>{
+ Object.assign(process.env,{AUTOMATION_CONTROL_MODE:'deploy',AUTOMATION_RESTART_APPROVED:'true',AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true'});
+ expect(await runtimeEnabled()).toBe(false);
+});
+test('budget exceeding 20 blocks deployment runtime',async()=>{
+ Object.assign(process.env,{AUTOMATION_CONTROL_MODE:'deploy',AUTOMATION_RESTART_APPROVED:'true',TUYA_TRIAL_QUOTA_VERIFIED:'true',AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',TUYA_DAILY_API_LIMIT:'21'});
+ expect(await runtimeEnabled()).toBe(false);
 });

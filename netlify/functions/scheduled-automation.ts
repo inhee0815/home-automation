@@ -10,15 +10,15 @@ export const rawHandler = async (event?: Parameters<Parameters<typeof schedule>[
   if (event) connectLambda(event as unknown as Parameters<typeof connectLambda>[0]);
 
   if (!(await runtimeEnabled())) {
-    await recordRun('PAUSED');
-    return {statusCode:200,body:JSON.stringify({ok:true,skipped:true,reason:'Automation safety interlock is off'})};
+    const monitorRecorded = await recordRun('PAUSED');
+    return {statusCode:200,body:JSON.stringify({ok:true,skipped:true,monitorRecorded,reason:'Automation safety interlock is off'})};
   }
   try {
     const result = await new AutomationEngine().evaluateAndExecute();
-    await recordRun(result.action.startsWith('SKIPPED_') ? 'ERROR' : 'OK', result);
+    const monitorRecorded = await recordRun(result.action.startsWith('SKIPPED_') ? 'ERROR' : 'OK', result);
     await notifyAutomationResult(result);
     console.log(JSON.stringify({event:'hood_automation',...result}));
-    return {statusCode:200,body:JSON.stringify({ok:true,data:result})};
+    return {statusCode:200,body:JSON.stringify({ok:true,data:result,monitorRecorded})};
   } catch {
     await recordRun('ERROR');
     await notifyIncident('TUYA_UNAVAILABLE','Unexpected automation evaluation failure');

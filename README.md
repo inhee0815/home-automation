@@ -142,3 +142,25 @@ Netlify Blobs의 `strong` 읽기는 Functions 런타임에서 `uncachedEdgeURL`�
 **자동화 ON은 코드 레벨에서 잠겨 있습니다.** 변경된 OFF 스위치가 모든 인스턴스에 즉시 반영된다는 보장이 없고, Tuya API 일일 시도 횟수 역시 Blobs의 read-modify-write 방식이므로 동시 호출 시 엄격히 제한할 수 없습니다. 이 프로젝트는 운영자 승인 여부와 관계없이 실제 LG/Tuya 제어를 시작하지 않습니다. 즉시 중단·호출량 엄격한 제한이 필요한 경우 트랜잭션 기반 저장소와 단일 실행 경로로 교체해야 합니다.
 
 관리자 대시보드에서는 `RUNTIME_INTERLOCK_STRONG_CONSISTENCY_UNAVAILABLE`을 ON 차단 사유로 표시합니다. OFF 요청은 저장만 수행하며 기기 플러그를 직접 변경하지 않습니다.
+
+## 배포 단위 자동화 재개 경로 (2026-11-17)
+
+Netlify Blobs가 `eventual` 일관성만 제공하는 현재 배포에서는 Blob 기반 실시간 ON/OFF를 기기 명령의 승인 수단으로 사용하지 않습니다. **관리자 대시보드의 ON/OFF는 deploy 모드에서 명시적으로 409를 반환**하여 즉시 중단인 것처럼 오해하지 않게 합니다.
+
+기본적으로 실제 장치 호출은 차단됩니다. 재개 준비를 위해서는 별도 운영 승인과 Tuya Trial 잔여 할당량 재확인 후 Netlify Functions 스코프에서 아래 값을 설정하고 **새 운영 배포**를 만들어야 합니다.
+
+```env
+AUTOMATION_CONTROL_MODE=deploy
+AUTOMATION_RESTART_APPROVED=true
+TUYA_TRIAL_QUOTA_VERIFIED=true
+AUTOMATION_ENABLED=true
+TUYA_COMMANDS_ENABLED=true
+TUYA_QUOTA_GUARD_ENABLED=true
+TUYA_DAILY_API_LIMIT=10
+```
+
+설정 예시는 **자동 실행 권장이나 즉시 설정 지시가 아닙니다**. 아직 Tuya 잔여 할당량과 LG 상태 파서의 실제 기기 검증이 완료되지 않았습니다. `TUYA_DAILY_API_LIMIT`는 1~20 범위로 강제하며, 현재 Blobs 기반 카운터는 **근사치일 뿐 엄격한 상한이 아닙니다**. 1분 스케줄과 중복/병렬 호출에서 초과 가능성이 남아 있습니다. 엄격한 카운터가 필요하면 트랜잭션 DB나 단일 큐가 필요합니다.
+
+중단 방법: Netlify `AUTOMATION_RESTART_APPROVED=false` (또는 `AUTOMATION_ENABLED=false`) 변경 후 새 운영 배포. 배포가 완료되기 전 진행 중인 호출은 취소할 수 없으므로 물리 기기나 Tuya 앱을 통한 직접 정지가 별도로 필요할 수 있습니다.
+
+Blobs 저장 검증: Function 로그에서 `monitoring_write_success`를 확인한 다음 관리자 대시보드 `storageEvidence.latestRunAt`이 최근 시각인지 확인합니다. 두 사실이 일치해야 저장/재조회 증거로 취급합니다.
