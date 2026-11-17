@@ -25,9 +25,9 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
 <body><main>
 <header><div><div class="eyebrow">SWEET HOME · OPERATIONS</div><h1>Kitchen Hood Automation</h1><p>LG ThinQ · Netlify Functions · Tuya Cloud 사용량</p></div><div class="badge" id="overall">인증 필요</div></header>
 <section class="surface"><h2>운영 현황 조회</h2>
-<p>관리자 토큰은 이 화면의 메모리에만 보관하며, 새로고침 시 삭제됩니다. 브라우저에 저장하거나 URL에 포함하지 않습니다.</p>
+<p>기본적으로 현재 탭에서 인증을 유지합니다. 아래 옵션을 선택하면 이 브라우저를 다시 열어도 토큰을 기억합니다. 공용 기기에서는 선택하지 마세요. 로그인 정보는 브라우저 저장소에 보관되므로 이 기기나 브라우저 프로필에 접근할 수 있는 사람에게 노출될 수 있습니다.</p>
 <div class="controls"><input id="token" type="password" autocomplete="off" placeholder="관리자 토큰 입력" aria-label="관리자 토큰">
-<button id="refresh">조회</button><button id="clear">지우기</button></div><p id="feedback" aria-live="polite"></p></section>
+<button id="refresh">조회</button><button id="clear">로그아웃</button></div><p style="margin-top:12px"><label><input id="remember" type="checkbox" style="min-width:auto;flex:none;width:16px;height:16px;vertical-align:middle;margin-right:6px">이 기기에서 로그인 유지 (공용 기기에서는 선택하지 않기)</label></p><p id="feedback" aria-live="polite"></p></section>
 <div class="grid">
  <div class="tile"><div class="label">자동화 상태</div><div class="value" id="mode">—</div><small id="modeSub">조회 전</small></div>
  <div class="tile"><div class="label">마지막 실행</div><div class="value" id="last">—</div><small id="lastSub">—</small></div>
@@ -65,13 +65,23 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
 <script>
 (()=> {
  const $=id=>document.getElementById(id);
+ const SESSION_KEY='hood_dashboard_session_token';
+ const REMEMBER_KEY='hood_dashboard_remembered_token';
+ const storageGet=(store,name)=>{try{return store.getItem(name)||''}catch{return ''}};
+ const storageSet=(store,name,value)=>{try{store.setItem(name,value);return true}catch{return false}};
+ const storageRemove=(store,name)=>{try{store.removeItem(name)}catch{}};
  let key='';
+ const remembered=storageGet(localStorage,REMEMBER_KEY);
+ const session=storageGet(sessionStorage,SESSION_KEY);
+ key=remembered||session;
+ $('remember').checked=Boolean(remembered);
+ if(key)set('feedback','저장된 인증으로 자동 조회합니다.');
  const set=(id,value)=>{$(id).textContent=String(value??'—')};
  const date=value=>{if(!value)return '—';const d=new Date(typeof value==='number'?value:value);return Number.isNaN(d.getTime())?'—':d.toLocaleString('ko-KR')};
  const empty=(el,span)=>{el.replaceChildren();const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=span;td.textContent='기록 없음';tr.append(td);el.append(tr)};
  const rows=(id,items,keys)=>{const root=$(id);root.replaceChildren();if(!items.length){empty(root,keys.length);return}
    for(const item of items){const tr=document.createElement('tr');for(const fn of keys){const td=document.createElement('td');td.textContent=String(fn(item)??'—');tr.append(td)}root.append(tr)}};
- const clear=()=>{key='';$('token').value='';set('feedback','관리자 토큰을 지웠습니다.');$('switchOff').disabled=true;$('switchOn').disabled=true;set('storageState','—');set('readiness','—');set('readinessReasons','인증 후 확인');$('testStatus').disabled=true;$('testOn').disabled=true;$('testOff').disabled=true;$('resetBreaker').disabled=true;};
+ const clear=()=>{key='';storageRemove(localStorage,REMEMBER_KEY);storageRemove(sessionStorage,SESSION_KEY);$('remember').checked=false;$('token').value='';set('feedback','이 브라우저의 로그인 정보를 삭제했습니다.');$('switchOff').disabled=true;$('switchOn').disabled=true;set('storageState','—');set('readiness','—');set('readinessReasons','인증 후 확인');$('testStatus').disabled=true;$('testOn').disabled=true;$('testOff').disabled=true;$('resetBreaker').disabled=true;};
  $('clear').onclick=clear;
  async function changeSwitch(enabled){
   if(enabled && $('switchOn').disabled){set('switchFeedback','ON 버튼이 잠긴 상태입니다. 운영 상태를 다시 조회하세요.');return}
@@ -127,7 +137,14 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
   $('refresh').disabled=true;$('switchOn').disabled=true;$('switchOff').disabled=true;set('feedback','운영 상태를 조회하고 있습니다.');
   try{
    const res=await fetch('/api/monitor-status',{headers:{'x-automation-token':key},cache:'no-store'});
-   const data=await res.json();if(!res.ok)throw new Error(data.error||('HTTP '+res.status));
+   const data=await res.json();if(!res.ok){if(res.status===401){clear()}throw new Error(data.error||('HTTP '+res.status))}
+   if($('remember').checked){
+      storageRemove(sessionStorage,SESSION_KEY);
+      if(!storageSet(localStorage,REMEMBER_KEY,key))set('feedback','로그인 유지 저장 실패: 브라우저 저장소를 확인하세요.');
+   }else{
+      storageRemove(localStorage,REMEMBER_KEY);
+      storageSet(sessionStorage,SESSION_KEY,key);
+   }
    // Monitoring history/incident read failures must not silently disagree with arming eligibility.
    // Quota usage/store failures are safety-relevant and keep ON disabled.
    const criticalWarnings=(data.warnings||[]).filter(w=>['TUYA_USAGE_UNAVAILABLE','BLOBS_STORE_UNAVAILABLE'].includes(w));
@@ -176,5 +193,6 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
   }catch(e){set('overall','조회 실패');set('feedback',e.message);set('switchFeedback','운영 상태 조회 실패 · ON 버튼 비활성화')}
   finally{$('refresh').disabled=false;$('token').value=''}
  };
+ if(key)$('refresh').click();
 })();
 </script></body></html>
