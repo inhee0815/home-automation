@@ -98,8 +98,18 @@ export class AutomationEngine {
       }
     }
 
-    const verifyDue = process.env.TUYA_PERIODIC_VERIFY === 'true'
-      && (!state.lastVerifiedAt || now - state.lastVerifiedAt >= verificationMs());
+    // OFF is safety-relevant: a cached OFF is not evidence that the plug is
+    // currently OFF. Reconcile shortly after shutdown, then at a lower idle
+    // frequency to avoid exceeding the daily Tuya request budget.
+    const recentOff = next.offDetectedAt !== null && now - next.offDetectedAt <= 15 * 60_000;
+    const offIntervalMs = recentOff ? 3 * 60_000 : 60 * 60_000;
+    const offConfirmationStale = target === 'OFF' && next.confirmed === 'OFF'
+      && (!state.lastVerifiedAt
+        || (next.offDetectedAt !== null && state.lastVerifiedAt < next.offDetectedAt)
+        || now - state.lastVerifiedAt >= offIntervalMs);
+    const verifyDue = offConfirmationStale ||
+      (process.env.TUYA_PERIODIC_VERIFY === 'true'
+       && (!state.lastVerifiedAt || now - state.lastVerifiedAt >= verificationMs()));
 
     if (next.confirmed === target && !verifyDue) {
       await this.store.save(next);
@@ -141,11 +151,14 @@ export class AutomationEngine {
     try {
       if (verifyDue && state.confirmed === target) {
         const observed = await this.tuyaClient.getStatus();
+        if (!observed.online || typeof observed.switch_1 !== 'boolean')
+          throw new Error('Tuya plug state unavailable');
         next.confirmed = observed.switch_1 ? 'ON' : 'OFF';
         next.lastVerifiedAt = now;
         if (next.confirmed === target) {
+          next.failureCount = 0;
           await this.store.save(next);
-          return result(target === 'ON' ? 'ALREADY_ON' : 'ALREADY_OFF', induction, target, 'Periodic verification matched.');
+          return result(target === 'ON' ? 'ALREADY_ON' : 'ALREADY_OFF', induction, target, 'Verified actual Tuya switch matches target.');
         }
       }
       if (!(await runtimeEnabled())) return result('SKIPPED_TUYA_ERROR', induction, next.confirmed, 'Runtime interlock is off.');

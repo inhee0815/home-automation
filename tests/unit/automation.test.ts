@@ -36,8 +36,8 @@ test('disabled automation never makes external calls', async () => {
   expect(s.tuya.getStatus).not.toHaveBeenCalled();
   expect(command).not.toHaveBeenCalled();
 });
-test('unchanged OFF consumes zero Tuya requests', async () => {
-  const s = setup(off, baseline());
+test('recently verified unchanged OFF consumes zero Tuya requests', async () => {
+  const s = setup(off, baseline({lastVerifiedAt:180000}));
   expect((await s.engine.evaluateAndExecute(200000)).action).toBe('ALREADY_OFF');
   expect(s.tuya.getStatus).not.toHaveBeenCalled();
   expect(command).not.toHaveBeenCalled();
@@ -152,4 +152,31 @@ test('LG turning ON during evaluation cancels stale OFF command',async()=>{
  s.lg.getCooktopStatus.mockResolvedValueOnce(off).mockResolvedValueOnce(on);
  expect((await s.engine.evaluateAndExecute(200000)).message).toMatch(/Induction changed/);
  expect(command).not.toHaveBeenCalled();
+});
+
+test('cached OFF without verification reconciles physical ON and sends OFF',async()=>{
+ const s=setup(off,baseline({induction:'OFF',desired:'OFF',confirmed:'OFF',offDetectedAt:1000,lastVerifiedAt:null}));
+ (s.tuya.getStatus as jest.Mock).mockResolvedValue({online:true,switch_1:true});
+ expect((await s.engine.evaluateAndExecute(200000)).action).toBe('TURN_OFF');
+ expect(s.tuya.getStatus).toHaveBeenCalledTimes(1);
+ expect(command).toHaveBeenCalledWith(false);
+});
+test('cached OFF with physical OFF verifies without redundant command',async()=>{
+ const s=setup(off,baseline({induction:'OFF',desired:'OFF',confirmed:'OFF',offDetectedAt:1000,lastVerifiedAt:null}));
+ (s.tuya.getStatus as jest.Mock).mockResolvedValue({online:true,switch_1:false});
+ expect((await s.engine.evaluateAndExecute(200000)).action).toBe('ALREADY_OFF');
+ expect(s.tuya.getStatus).toHaveBeenCalledTimes(1);
+ expect(command).not.toHaveBeenCalled();
+});
+test('recent verified OFF avoids unnecessary Tuya requests until its verification window',async()=>{
+ const s=setup(off,baseline({induction:'OFF',desired:'OFF',confirmed:'OFF',offDetectedAt:1000,lastVerifiedAt:180000}));
+ expect((await s.engine.evaluateAndExecute(200000)).action).toBe('ALREADY_OFF');
+ expect(s.tuya.getStatus).not.toHaveBeenCalled();
+ expect(command).not.toHaveBeenCalled();
+});
+test('cached OFF rechecks after 3 minutes when shutdown recently detected',async()=>{
+ const s=setup(off,baseline({induction:'OFF',desired:'OFF',confirmed:'OFF',offDetectedAt:100000,lastVerifiedAt:120000}));
+ (s.tuya.getStatus as jest.Mock).mockResolvedValue({online:true,switch_1:true});
+ expect((await s.engine.evaluateAndExecute(320001)).action).toBe('TURN_OFF');
+ expect(command).toHaveBeenCalledWith(false);
 });
