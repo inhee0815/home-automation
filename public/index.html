@@ -64,13 +64,13 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
    const data=await res.json();if(!res.ok)throw new Error(data.error||('HTTP '+res.status));
    set('overall',data.status);set('mode',data.status);set('modeSub',data.commandsEnabled?'제어 허용':'명령 차단');
    set('last',data.latestRun?date(data.latestRun.time):'기록 없음');set('lastSub',data.latestRun?.action||'실행 기록 없음');
-   set('quota',data.tuya.attempts+' / '+data.tuya.limit);
+   set('quota',(data.tuya.attempts===null?'조회 실패':data.tuya.attempts)+' / '+data.tuya.limit);
    set('hood',data.hood?.confirmed||'UNKNOWN');set('hoodSub','확인된 플러그 상태 추정치 (실제 후드 작동 미검증)');
    set('induction',data.hood?.induction||'UNKNOWN');set('desired',data.hood?.desired||'UNKNOWN');
    set('verified',date(data.hood?.lastVerifiedAt));set('fails',data.hood?.failureCount??'—');
    rows('incidents',data.incidents,[x=>x.code,x=>date(x.lastSeenAt),x=>x.count]);
    rows('history',data.history,[x=>date(x.time),x=>x.outcome,x=>x.action,x=>x.induction,x=>x.hood]);
-   set('feedback','조회 완료 · 서버 기준 '+date(data.serverTime));
+   set('feedback',data.partialData?'일부 모니터링 데이터 조회 실패: '+(data.warnings||[]).join(', '):'조회 완료 · 서버 기준 '+date(data.serverTime));
   }catch(e){set('overall','조회 실패');set('feedback',e.message)}
   finally{$('refresh').disabled=false;$('token').value=''}
  };
