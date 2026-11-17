@@ -1,6 +1,8 @@
 import { connectLambda } from '@netlify/blobs';
 import type { Handler, HandlerResponse } from '@netlify/functions';
 import { TuyaClient } from '../../src/tuya/client';
+import crypto from 'crypto';
+import { runtimeEnabled } from '../../src/automation/runtimeSwitch';
 
 const headers: Record<string, string> = {
   'Content-Type': 'application/json',
@@ -16,6 +18,14 @@ export const handler: Handler = async (event): Promise<HandlerResponse> => {
     };
   }
 
+  const provided = event.headers['x-automation-token'];
+  const expected = process.env.AUTOMATION_ADMIN_TOKEN;
+  if (!expected || !provided || !crypto.timingSafeEqual(
+    crypto.createHash('sha256').update(provided).digest(),
+    crypto.createHash('sha256').update(expected).digest()
+  )) return {statusCode:401,headers,body:JSON.stringify({error:'Unauthorized'})};
+
+  if (!(await runtimeEnabled())) return {statusCode:403,headers,body:JSON.stringify({error:'Automation is paused; no Tuya API quota will be spent'})};
   try {
     const tuyaClient = new TuyaClient();
     const status = await tuyaClient.getStatus();
@@ -29,7 +39,7 @@ export const handler: Handler = async (event): Promise<HandlerResponse> => {
       }),
     };
   } catch (err: any) {
-    console.error('[Tuya Status Error]', err.message);
+    console.error(JSON.stringify({event:'tuya_status_failed',errorType:err instanceof Error?err.name:'UnknownError'}));
 
     return {
       statusCode: 500,
@@ -37,7 +47,6 @@ export const handler: Handler = async (event): Promise<HandlerResponse> => {
       body: JSON.stringify({
         ok: false,
         error: 'Failed to retrieve Tuya device status',
-        message: err.message,
       }),
     };
   }

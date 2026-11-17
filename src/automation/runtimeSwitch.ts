@@ -22,7 +22,10 @@ const store = () => getStore({
  */
 export function deploymentAllowsRun(): boolean {
   const budget = Number(process.env.TUYA_DAILY_API_LIMIT ?? '20');
-  return process.env.AUTOMATION_CONTROL_MODE === 'deploy'
+  return process.env.TUYA_QUOTA_BACKEND === 'postgres'
+    && !!process.env.TUYA_QUOTA_DB_URL
+    && !!process.env.TUYA_QUOTA_DB_SERVICE_ROLE_KEY
+    && process.env.AUTOMATION_CONTROL_MODE === 'deploy'
     && process.env.AUTOMATION_RESTART_APPROVED === 'true'
     && process.env.TUYA_TRIAL_QUOTA_VERIFIED === 'true'
     && process.env.AUTOMATION_ENABLED === 'true'
@@ -44,6 +47,7 @@ function isProductionRequest(host?: string): boolean {
 export function armingBlockers(host?: string): string[] {
   const blockers: string[] = ['DASHBOARD_ON_UNSUPPORTED_USE_DEPLOY_CONTROL'];
   if (process.env.AUTOMATION_CONTROL_MODE !== 'deploy') blockers.push('DEPLOY_CONTROL_MODE_REQUIRED');
+  if (process.env.TUYA_QUOTA_BACKEND !== 'postgres' || !process.env.TUYA_QUOTA_DB_URL || !process.env.TUYA_QUOTA_DB_SERVICE_ROLE_KEY) blockers.push('ATOMIC_QUOTA_DATABASE_REQUIRED');
   if (process.env.AUTOMATION_RESTART_APPROVED !== 'true') blockers.push('RESTART_REVIEW_REQUIRED');
   if (process.env.TUYA_TRIAL_QUOTA_VERIFIED !== 'true') blockers.push('TUYA_TRIAL_QUOTA_UNVERIFIED');
   const budget = Number(process.env.TUYA_DAILY_API_LIMIT ?? 20);

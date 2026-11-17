@@ -108,7 +108,7 @@ export const handler: Handler = async (event) => {
         reasons: [
           ...(process.env.AUTOMATION_RESTART_APPROVED === 'true' ? [] : ['RESTART_APPROVAL_MISSING']),
           ...(process.env.TUYA_TRIAL_QUOTA_VERIFIED === 'true' ? [] : ['TUYA_TRIAL_QUOTA_UNVERIFIED']),
-          'TUYA_HARD_QUOTA_NOT_ENFORCED',
+          ...(process.env.TUYA_QUOTA_BACKEND === 'postgres' && process.env.TUYA_QUOTA_DB_URL && process.env.TUYA_QUOTA_DB_SERVICE_ROLE_KEY ? ['TUYA_HARD_QUOTA_DB_NOT_LIVE_TESTED'] : ['TUYA_HARD_QUOTA_NOT_ENFORCED']),
           'LG_DEVICE_MAPPING_NOT_FIELD_VERIFIED',
           'HOOD_PHYSICAL_BEHAVIOR_NOT_FIELD_VERIFIED',
           'IMMEDIATE_STOP_NOT_AVAILABLE',
@@ -128,7 +128,8 @@ export const handler: Handler = async (event) => {
           ? null : usage?.attempts ?? 0,
         limit: Number(process.env.TUYA_DAILY_API_LIMIT ?? 20),
         quotaGuardEnabled: process.env.TUYA_QUOTA_GUARD_ENABLED === 'true',
-        approximate: true,
+        enforcement: process.env.TUYA_QUOTA_BACKEND === 'postgres' && process.env.TUYA_QUOTA_DB_URL && process.env.TUYA_QUOTA_DB_SERVICE_ROLE_KEY ? 'ATOMIC_DATABASE' : 'NOT_CONFIGURED',
+        approximate: true, // Legacy Blobs widget is NOT the transactional DB counter.
       },
       incidents: incidents.filter(Boolean),
       history: history.filter((x): x is RunRecord => x !== null),
