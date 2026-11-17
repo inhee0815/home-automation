@@ -118,6 +118,6 @@ test('command failure stores sanitized diagnostic without exposing provider deta
  expect(result.action).toBe('SKIPPED_TUYA_ERROR');
  expect(result.message).not.toContain('secret provider message');
  const persisted=s.store.save.mock.calls.at(-1)?.[0];
- expect(persisted.failureCount).toBe(1);
- expect(persisted.lastFailureReason).toBe('UNKNOWN');
+ expect(persisted?.failureCount).toBe(1);
+ expect(persisted?.lastFailureReason).toBe('UNKNOWN');
 });
