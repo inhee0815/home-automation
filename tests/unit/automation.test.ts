@@ -73,3 +73,34 @@ test('successful prior command is checked after cooldown', async () => {
   expect(s.tuya.getStatus).toHaveBeenCalledTimes(1);
   expect(command).not.toHaveBeenCalled();
 });
+
+test('new ON target bypasses old OFF cooldown after plug verification',async()=>{
+ const s=setup(on,baseline({induction:'OFF',desired:'OFF',confirmed:'UNKNOWN',lastCommandAt:100000,nextRetryAt:400000}));
+ (s.tuya.getStatus as jest.Mock).mockResolvedValue({online:true,switch_1:false});
+ expect((await s.engine.evaluateAndExecute(200000)).action).toBe('TURN_ON');
+ expect(s.tuya.getStatus).toHaveBeenCalledTimes(1);
+ expect(command).toHaveBeenCalledWith(true);
+});
+test('new ON target avoids duplicate command when plug is ON',async()=>{
+ const s=setup(on,baseline({induction:'OFF',desired:'OFF',confirmed:'UNKNOWN',lastCommandAt:100000,nextRetryAt:400000}));
+ (s.tuya.getStatus as jest.Mock).mockResolvedValue({online:true,switch_1:true});
+ expect((await s.engine.evaluateAndExecute(200000)).action).toBe('ALREADY_ON');
+ expect(command).not.toHaveBeenCalled();
+});
+test('same ON target cooldown remains in force',async()=>{
+ const s=setup(on,baseline({induction:'ON',desired:'ON',confirmed:'UNKNOWN',lastCommandAt:100000,nextRetryAt:400000}));
+ expect((await s.engine.evaluateAndExecute(200000)).message).toBe('Command cooldown/backoff active.');
+ expect(s.tuya.getStatus).not.toHaveBeenCalled();
+ expect(command).not.toHaveBeenCalled();
+});
+test('failed ON verification leaves plug untouched',async()=>{
+ const s=setup(on,baseline({induction:'OFF',desired:'OFF',confirmed:'UNKNOWN',lastCommandAt:100000,nextRetryAt:400000}));
+ (s.tuya.getStatus as jest.Mock).mockRejectedValue(new Error('Tuya API failure'));
+ expect((await s.engine.evaluateAndExecute(200000)).message).toMatch(/verification failed/);
+ expect(command).not.toHaveBeenCalled();
+});
+test('circuit breaker remains enforced across new target',async()=>{
+ const s=setup(on,baseline({induction:'OFF',desired:'OFF',confirmed:'UNKNOWN',lastCommandAt:100000,nextRetryAt:400000,failureCount:3}));
+ expect((await s.engine.evaluateAndExecute(200000)).message).toMatch(/Circuit breaker/);
+ expect(command).not.toHaveBeenCalled();
+});

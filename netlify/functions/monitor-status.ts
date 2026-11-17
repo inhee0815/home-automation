@@ -127,7 +127,7 @@ export const handler: Handler = async (event) => {
       tuya: {
         today, attempts: warnings.includes('TUYA_USAGE_UNAVAILABLE') || warnings.includes('BLOBS_STORE_UNAVAILABLE')
           ? null : usage?.attempts ?? 0,
-        limit: Number(process.env.TUYA_DAILY_API_LIMIT ?? 20),
+        limit: Number(process.env.TUYA_DAILY_API_LIMIT ?? 100),
         quotaGuardEnabled: process.env.TUYA_QUOTA_GUARD_ENABLED === 'true',
         enforcement: 'BEST_EFFORT_BLOBS_ONLY',
         approximate: true, // Legacy Blobs widget is NOT the transactional DB counter.

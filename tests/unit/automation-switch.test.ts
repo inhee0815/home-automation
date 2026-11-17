@@ -73,6 +73,12 @@ test('preview and overbudget fail closed',async()=>{
  SITE_ID:'178acf14-19c5-40c9-b50e-3a11162a0412',URL:'https://preview.example.com'});
  expect(await runtimeEnabled()).toBe(false);
  process.env.URL='https://sweethome-automation.netlify.app';
- process.env.TUYA_DAILY_API_LIMIT='9';
+ process.env.TUYA_DAILY_API_LIMIT='1001';
  expect(await runtimeEnabled()).toBe(false);
+});
+
+test('production accepts a budget above the former 8-call cap',async()=>{
+ Object.assign(process.env,{AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',TUYA_DAILY_API_LIMIT:'100',
+ SITE_ID:'178acf14-19c5-40c9-b50e-3a11162a0412',URL:'https://sweethome-automation.netlify.app'});
+ expect(await runtimeEnabled()).toBe(true);
 });
