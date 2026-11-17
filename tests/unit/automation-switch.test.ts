@@ -10,7 +10,7 @@ beforeEach(()=>{
  process.env.AUTOMATION_ADMIN_TOKEN='admin';
  delete process.env.AUTOMATION_ENABLED;delete process.env.TUYA_COMMANDS_ENABLED;delete process.env.TUYA_QUOTA_GUARD_ENABLED;
  delete process.env.ENABLE_DASHBOARD_ARMING;delete process.env.CONTEXT;delete process.env.SITE_ID;delete process.env.URL;
- delete process.env.AUTOMATION_CONTROL_MODE;delete process.env.AUTOMATION_RESTART_APPROVED;delete process.env.TUYA_TRIAL_QUOTA_VERIFIED;
+ delete process.env.AUTOMATION_CONTROL_MODE;delete process.env.AUTOMATION_RESTART_APPROVED;delete process.env.TUYA_TRIAL_QUOTA_VERIFIED;delete process.env.TUYA_QUOTA_BACKEND;delete process.env.TUYA_QUOTA_DB_URL;delete process.env.TUYA_QUOTA_DB_SERVICE_ROLE_KEY;
 });
 test('absent runtime state fails closed',async()=>{
  process.env.AUTOMATION_ENABLED='true';process.env.TUYA_COMMANDS_ENABLED='true';process.env.TUYA_QUOTA_GUARD_ENABLED='true';
@@ -56,7 +56,7 @@ test('preview host cannot arm even with production site env',async()=>{
 });
 
 test('deploy-only explicit review enables runtime without Blob read', async()=>{
- Object.assign(process.env,{AUTOMATION_CONTROL_MODE:'deploy',AUTOMATION_RESTART_APPROVED:'true',TUYA_TRIAL_QUOTA_VERIFIED:'true',AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',TUYA_DAILY_API_LIMIT:'10'});
+ Object.assign(process.env,{AUTOMATION_CONTROL_MODE:'deploy',AUTOMATION_RESTART_APPROVED:'true',TUYA_TRIAL_QUOTA_VERIFIED:'true',AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',TUYA_DAILY_API_LIMIT:'10',TUYA_QUOTA_BACKEND:'postgres',TUYA_QUOTA_DB_URL:'https://example.supabase.co',TUYA_QUOTA_DB_SERVICE_ROLE_KEY:'test-secret'});
  expect(await runtimeEnabled()).toBe(true);
  expect(store.get).not.toHaveBeenCalled();
  const controlResponse=await request(false);
@@ -70,4 +70,10 @@ test('unreviewed trial quota blocks network calls',async()=>{
 test('budget exceeding 20 blocks deployment runtime',async()=>{
  Object.assign(process.env,{AUTOMATION_CONTROL_MODE:'deploy',AUTOMATION_RESTART_APPROVED:'true',TUYA_TRIAL_QUOTA_VERIFIED:'true',AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',TUYA_DAILY_API_LIMIT:'21'});
  expect(await runtimeEnabled()).toBe(false);
+});
+
+test('no transactional quota database means no automation even if all legacy flags true',async()=>{
+ Object.assign(process.env,{AUTOMATION_CONTROL_MODE:'deploy',AUTOMATION_RESTART_APPROVED:'true',TUYA_TRIAL_QUOTA_VERIFIED:'true',AUTOMATION_ENABLED:'true',TUYA_COMMANDS_ENABLED:'true',TUYA_QUOTA_GUARD_ENABLED:'true',TUYA_DAILY_API_LIMIT:'10'});
+ expect(await runtimeEnabled()).toBe(false);
+ expect(store.get).not.toHaveBeenCalled();
 });
