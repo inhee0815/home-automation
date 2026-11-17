@@ -111,3 +111,14 @@ npm run dev
 테스트: `npm ci && npm run build && npm test -- --runInBand`.
 
 > 현재 의존성의 `@netlify/blobs` v9는 transactional counter를 제공하지 않습니다. 일일 API 수치는 관찰용이며 병렬 실행 시 정확한 하드캡이 아닙니다. 정확한 사용량 예산 및 분산 락은 트랜잭션 DB/단일 워커로 구현해야 합니다.
+
+## 대시보드 안전 ON/OFF (2026-11)
+
+관리자 전용 `POST /api/automation-switch` (`{"enabled":true|false}`, `x-automation-token`)를 추가했습니다.
+
+- **OFF**: Netlify Blobs `control/runtime-switch`에 `enabled:false`를 기록합니다. 후드 플러그 전원 자체는 변경하지 않습니다.
+- **ON**: Production에서 `AUTOMATION_ENABLED=true`, `TUYA_COMMANDS_ENABLED=true`, `TUYA_QUOTA_GUARD_ENABLED=true`, `ENABLE_DASHBOARD_ARMING=true`가 *모두* 설정되어야 허용됩니다. 설정이 없으면 HTTP 409이고 자동 제어는 계속 차단됩니다.
+- 기본값: Blob 키가 없거나 읽기에 실패하면 OFF(fail closed). 스케줄 및 엔진·수동 제어는 런타임 스위치를 확인합니다.
+- 기존 실행 중인 Tuya API 요청을 취소하는 원자적 강제 정지는 불가능합니다. 분산 락·엄격한 API 호출량 상한도 별도 데이터베이스/큐 없이는 보장되지 않습니다.
+- **현재 운영 설정에서는 ON이 불가능하도록 유지**합니다. 실기기 동작과 API 한도 문제가 해결된 뒤 별도 운영 승인 필요.
+- Netlify가 환경 변수 변경 요청에 HTTP 403을 반환하면 이 기능으로 권한 문제가 해결되지는 않습니다. 플러그인 앱 권한과 Netlify 액세스 권한을 별도로 확인해야 합니다.

@@ -1,5 +1,6 @@
 import type {Handler} from '@netlify/functions';
 import { AutomationEngine } from '../../src/automation/engine';
+import { runtimeEnabled } from '../../src/automation/runtimeSwitch';
 
 export const handler: Handler = async event => {
   if (event.httpMethod !== 'POST') return {statusCode: 405, body: 'Method Not Allowed'};
@@ -9,6 +10,7 @@ export const handler: Handler = async event => {
   if (!token || event.headers['x-automation-token'] !== token)
     return {statusCode: 401, body: 'Unauthorized'};
   try {
+    if (!(await runtimeEnabled())) return {statusCode:403,body:'Runtime interlock is off'};
     const result = await new AutomationEngine().evaluateAndExecute();
     return {statusCode: 200, body: JSON.stringify({ok: true, data: result})};
   } catch {

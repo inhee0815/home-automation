@@ -1,11 +1,13 @@
 import { rawHandler } from '../../netlify/functions/scheduled-automation';
 import { AutomationEngine } from '../../src/automation/engine';
 jest.mock('../../src/automation/engine');
+jest.mock('../../src/automation/runtimeSwitch',()=>({runtimeEnabled:jest.fn()}));
+import { runtimeEnabled } from '../../src/automation/runtimeSwitch';
 const evalMock = jest.fn();
 beforeEach(() => {
   jest.clearAllMocks();
   (AutomationEngine as jest.Mock).mockImplementation(() => ({evaluateAndExecute: evalMock}));
-  delete process.env.AUTOMATION_ENABLED;
+  (runtimeEnabled as jest.Mock).mockResolvedValue(false);
 });
 test('scheduled function is paused by default', async () => {
   const response = await rawHandler();
@@ -14,7 +16,7 @@ test('scheduled function is paused by default', async () => {
   expect(evalMock).not.toHaveBeenCalled();
 });
 test('enabled scheduled function evaluates once', async () => {
-  process.env.AUTOMATION_ENABLED = 'true';
+  (runtimeEnabled as jest.Mock).mockResolvedValue(true);
   evalMock.mockResolvedValue({action: 'ALREADY_OFF'});
   const response = await rawHandler();
   expect(JSON.parse(response.body).data.action).toBe('ALREADY_OFF');

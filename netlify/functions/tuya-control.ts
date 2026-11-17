@@ -1,5 +1,6 @@
 import type {Handler} from '@netlify/functions';
 import { sendDirectPlugCommand } from '../../src/tuya/directCommand';
+import { runtimeEnabled } from '../../src/automation/runtimeSwitch';
 
 export const handler: Handler = async event => {
   if (event.httpMethod !== 'POST') return {statusCode: 405, body: 'Method Not Allowed'};
@@ -14,6 +15,7 @@ export const handler: Handler = async event => {
   if (!body || typeof body !== 'object' || typeof (body as {on?: unknown}).on !== 'boolean')
     return {statusCode: 400, body: 'Expected {"on":boolean}'};
   try {
+    if (!(await runtimeEnabled())) return {statusCode:403,body:'Runtime interlock is off'};
     await sendDirectPlugCommand((body as {on: boolean}).on);
     return {statusCode: 200, body: JSON.stringify({ok: true, status: 'command_accepted_not_verified'})};
   } catch {
