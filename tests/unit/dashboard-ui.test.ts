@@ -7,7 +7,7 @@ test('ON eligibility is driven by actual button state and excludes noncritical h
   expect(html).toContain("const criticalWarnings=(data.warnings||[]).filter");
   expect(html).toContain("['TUYA_USAGE_UNAVAILABLE','BLOBS_STORE_UNAVAILABLE']");
   expect(html).toContain("const eligible=Boolean(data.canArmFromDashboard) && criticalWarnings.length===0");
-  expect(html).toContain("$('switchOn').disabled=!eligible");
+  expect(html).toContain("$('switchOn').disabled=data.controlMode==='DEPLOY' || !eligible");
   expect(html).not.toContain("disabled=!data.canArmFromDashboard || data.partialData");
 });
 
