@@ -17,7 +17,7 @@ function setup(status: any, initial: HoodState | null) {
   let data = initial;
   const store = {load: jest.fn(async () => data), save: jest.fn(async (v: HoodState) => {data = v;})};
   const lg = {getCooktopStatus: jest.fn(async () => status)};
-  const tuya = {getStatus: jest.fn(async () => ({switch_1: false}))};
+  const tuya = {getStatus: jest.fn(async () => ({online:true,switch_1: false}))};
   return {store, lg, tuya, engine: new AutomationEngine(lg as any, tuya as any, store)};
 }
 beforeEach(() => {
