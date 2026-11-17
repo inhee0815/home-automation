@@ -84,3 +84,13 @@ npm run dev
 - Usage entries: Netlify Blobs `AUTOMATION_BLOB_STORE` / `tuya-api/YYYY-MM-DD`. Logs contain `tuya_api_attempt_reserved`, attempts and limit. Dates are UTC. These are attempted calls, **not vendor-billed confirmed usage**.
 - **Not a strict contractual hard cap:** Blobs has no transactional counter/lock; overlapping invocations and out-of-band API calls can violate the effective limit. A DB transaction or single-writer queue is required for a provable hard cap.
 - `TUYA_QUOTA_GUARD_ENABLED`, `AUTOMATION_ENABLED`, `TUYA_COMMANDS_ENABLED` all default disabled. Do not turn any of them on until the CI build, actual-device status mapping, access controls and concurrency strategy are verified.
+
+## 장애 푸시 알림 (Telegram, 추가 설정 필요)
+
+`ALERTS_ENABLED=true`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`를 Netlify Functions 환경 변수로 설정하면 Telegram으로 장애 알림을 보냅니다. 사용자 승인 없이 봇이나 채팅방을 자동 생성할 수 없으므로 **설정 전에는 휴대폰 알림이 동작하지 않습니다.** 봇을 만들고 먼저 대화를 시작해야 메시지 전송이 가능하며, 토큰은 외부에 공개하지 마세요.
+
+- LG 오프라인/API 오류, Tuya 제어 실패·회로 차단, 후드 사후 확인 실패, 일일 호출 예산 80% 도달·초과를 감지합니다.
+- 동일 장애 종류는 기본 60분(`ALERT_COOLDOWN_MINUTES`) 간격으로 재알림합니다. Alert 전송 실패는 자동화 원래 결과를 덮지 않습니다.
+- **주의:** Tuya 스마트 플러그 ON/OFF 확인은 후드 팬이 실제로 회전한다는 증거가 아닙니다. 실제 후드 고장 감지에는 전력 사용량 또는 별도 센서가 필요합니다.
+- **주의:** Blobs 기반 중복 억제는 동시 실행 시 정확한 1회 보장이 되지 않습니다.
+- 함수가 실행되지 않는 장애는 함수 자신이 보고할 수 없습니다. 별도 외부 헬스체크가 필요합니다. 자동화가 의도적으로 중단된 상태에서는 장애 알림도 발생하지 않습니다.

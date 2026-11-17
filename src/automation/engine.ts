@@ -3,6 +3,7 @@ import { TuyaClient } from '../tuya/client';
 import { sendDirectPlugCommand } from '../tuya/directCommand';
 import { BlobStateRepository, HoodState, Power, StateRepository } from './stateStore';
 import { AutomationResult } from './types';
+import { notifyIncident } from './notification';
 
 export const SHUTDOWN_DELAY_MS = Math.max(0, Number(process.env.SHUTDOWN_DELAY_SECONDS ?? 90)) * 1000;
 const retryMs = () => Math.max(60, Number(process.env.CONTROL_RETRY_SECONDS ?? 300)) * 1000;
@@ -91,11 +92,13 @@ export class AutomationEngine {
       } catch {
         next.nextRetryAt = now + retryMs();
         await this.store.save(next);
+        await notifyIncident('HOOD_UNVERIFIED', '명령 후 Tuya 상태 확인에 실패했습니다.');
         return result('SKIPPED_TUYA_ERROR', induction, 'UNKNOWN', 'Post-command verification failed; retry delayed.');
       }
     }
 
     if (state.failureCount >= 3) {
+      await notifyIncident('TUYA_UNAVAILABLE', '명령 실패 누적으로 제어가 차단되었습니다.');
       await this.store.save(next);
       return result('SKIPPED_TUYA_ERROR', induction, state.confirmed, 'Circuit breaker open; manual reset required.');
     }
@@ -130,6 +133,7 @@ export class AutomationEngine {
       next.failureCount = state.failureCount + 1;
       next.nextRetryAt = now + Math.min(3600000, retryMs() * Math.pow(2, Math.min(5, next.failureCount - 1)));
       await this.store.save(next);
+      await notifyIncident('TUYA_UNAVAILABLE', '후드 전원 변경 명령이 실패했습니다.');
       return result('SKIPPED_TUYA_ERROR', induction, 'UNKNOWN', 'Tuya command failed; retry delayed.');
     }
   }

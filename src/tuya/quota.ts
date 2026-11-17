@@ -1,4 +1,5 @@
 import { getStore } from '@netlify/blobs';
+import { notifyIncident } from '../automation/notification';
 
 /**
  * Quota observability + conservative fail-closed request gate.
@@ -21,13 +22,17 @@ export async function reserveTuyaApiAttempt(now = new Date()): Promise<void> {
     const entry = await store.getWithMetadata(key, {type: 'json', consistency: 'strong'});
     const count = entry ? Number((entry.data as DailyUsage).attempts) : 0;
     if (!Number.isSafeInteger(count) || count < 0) throw new Error('Invalid persisted Tuya usage');
-    if (count >= max) throw new Error('Tuya daily API request budget exhausted');
+    if (count >= max) {
+      await notifyIncident('QUOTA_BLOCKED', `오늘 Tuya API 요청 예약 ${count}/${max}회. 추가 호출 차단.`);
+      throw new Error('Tuya daily API request budget exhausted');
+    }
     const value: DailyUsage = {date, attempts: count + 1, lastAt: now.toISOString()};
     const written = entry
       ? await store.setJSON(key, value, { onlyIfMatch: entry.etag })
       : await store.setJSON(key, value, { onlyIfNew: true });
     if (written.modified) {
       console.log(JSON.stringify({event: 'tuya_api_attempt_reserved', date, attempts: value.attempts, limit: max}));
+      if (value.attempts >= Math.ceil(max * 0.8)) await notifyIncident('QUOTA_WARNING', `오늘 Tuya API 요청 예약 ${value.attempts}/${max}회`);
       return;
     }
   }
