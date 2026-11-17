@@ -195,3 +195,7 @@ LG 상태 파서는 알려진 상태 및 버너 전력 신호가 없으면 **UNK
 - 명령 후에는 수락 응답만으로 성공을 단정하지 않으며 지연 후 Tuya 상태 검증 1회
 - 장애 시 재시도 간격 및 실패 누적 차단
 - Blobs 비원자적 read-modify-write를 사용하므로 **함수 중복 실행 시 완벽한 단 한 번의 명령/엄격한 API 상한은 보장할 수 없음**. Trial 잔여 한도와 물리 후드 ON/OFF 실증 전 자동화 활성화 금지.
+
+## Live automatic control (2026-11-17)
+At the operator's explicit request the hard-coded `return false` in `deploymentAllowsRun` was replaced with a production-only deployment gate. With existing `AUTOMATION_ENABLED=true`, `TUYA_COMMANDS_ENABLED=true`, `TUYA_QUOTA_GUARD_ENABLED=true` and `TUYA_DAILY_API_LIMIT=1..8` (default 8), the published production Scheduled Function evaluates LG each minute. Pausing requires setting `AUTOMATION_ENABLED=false` and redeploying. Preview deployments remain blocked.
+**Risk:** Netlify Blobs eventual-consistency quota reservations are not a strict global cap; the current Tuya Trial account remaining quota is not independently verified. This is a live physical appliance control. Review all commands and logs; stop from the Tuya app or device if needed. Observing a Tuya POST success does not verify hood fan motion.
