@@ -9,6 +9,8 @@ export interface HoodState {
   lastCommandAt: number | null;
   lastVerifiedAt: number | null;
   failureCount: number;
+  lastFailureReason?: string | null;
+  lastFailureAt?: number | null;
   nextRetryAt: number;
   updatedAt: number;
 }

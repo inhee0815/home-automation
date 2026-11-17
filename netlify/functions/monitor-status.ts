@@ -123,6 +123,7 @@ export const handler: Handler = async (event) => {
         induction: hood.induction, desired: hood.desired, confirmed: hood.confirmed,
         offDetectedAt: hood.offDetectedAt, lastCommandAt: hood.lastCommandAt,
         lastVerifiedAt: hood.lastVerifiedAt, failureCount: hood.failureCount,
+        lastFailureReason: hood.lastFailureReason ?? null, lastFailureAt: hood.lastFailureAt ?? null,
       } : null,
       tuya: {
         today, attempts: warnings.includes('TUYA_USAGE_UNAVAILABLE') || warnings.includes('BLOBS_STORE_UNAVAILABLE')

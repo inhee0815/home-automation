@@ -127,6 +127,9 @@ export class TuyaClient {
   public async getStatus(): Promise<TuyaStatusResponse> {
     const device = await this.getDeviceDetails();
     const statusArray = device.status || [];
+    const switchDp = statusArray.find((item) => item.code === 'switch_1');
+    if (!device.online || !switchDp || typeof switchDp.value !== 'boolean')
+      throw new Error('Tuya device offline or switch_1 status unavailable');
 
     const getVal = (code: string, defaultVal: any = null) => {
       const dp = statusArray.find((item) => item.code === code);

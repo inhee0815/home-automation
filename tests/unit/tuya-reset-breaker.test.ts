@@ -1,0 +1,26 @@
+jest.mock('@netlify/blobs',()=>({connectLambda:jest.fn()}));
+jest.mock('../../src/tuya/client',()=>({TuyaClient:jest.fn()}));
+jest.mock('../../src/automation/stateStore',()=>({BlobStateRepository:jest.fn()}));
+jest.mock('../../src/automation/runtimeSwitch',()=>({runtimeEnabled:jest.fn()}));
+import {handler} from '../../netlify/functions/tuya-reset-breaker';
+import {TuyaClient} from '../../src/tuya/client';
+import {BlobStateRepository} from '../../src/automation/stateStore';
+import {runtimeEnabled} from '../../src/automation/runtimeSwitch';
+const load=jest.fn(),save=jest.fn(),getStatus=jest.fn();
+const call=(token='test-token')=>handler!({httpMethod:'POST',headers:{'x-automation-token':token}} as any,{} as any) as any;
+beforeEach(()=>{
+ jest.clearAllMocks();process.env.AUTOMATION_ADMIN_TOKEN='test-token';
+ (runtimeEnabled as jest.Mock).mockResolvedValue(true);
+ (BlobStateRepository as jest.Mock).mockImplementation(()=>({load,save}));
+ (TuyaClient as jest.Mock).mockImplementation(()=>({getStatus}));
+ load.mockResolvedValue({induction:'ON',desired:'ON',confirmed:'UNKNOWN',failureCount:3,nextRetryAt:100000});
+ save.mockResolvedValue(undefined);
+});
+test('unauthorized request cannot reset',async()=>{expect((await call('wrong')).statusCode).toBe(401);expect(getStatus).not.toHaveBeenCalled()});
+test('not-open breaker cannot reset',async()=>{load.mockResolvedValue({failureCount:0});expect((await call()).statusCode).toBe(409);expect(getStatus).not.toHaveBeenCalled()});
+test('Tuya read failure cannot reset',async()=>{getStatus.mockRejectedValue(new Error('network failed'));expect((await call()).statusCode).toBe(503);expect(save).not.toHaveBeenCalled()});
+test('offline plug cannot reset',async()=>{getStatus.mockResolvedValue({online:false,switch_1:false});expect((await call()).statusCode).toBe(409);expect(save).not.toHaveBeenCalled()});
+test('verified reset does not issue plug command',async()=>{getStatus.mockResolvedValue({online:true,switch_1:false});
+ expect((await call()).statusCode).toBe(200);
+ expect(save).toHaveBeenCalledWith(expect.objectContaining({failureCount:0,nextRetryAt:0,confirmed:'OFF'}));
+});

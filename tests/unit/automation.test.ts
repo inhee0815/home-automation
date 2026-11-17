@@ -104,3 +104,20 @@ test('circuit breaker remains enforced across new target',async()=>{
  expect((await s.engine.evaluateAndExecute(200000)).message).toMatch(/Circuit breaker/);
  expect(command).not.toHaveBeenCalled();
 });
+
+test('circuit breaker message includes safe diagnostic category', async () => {
+ const s=setup(on, baseline({induction:'ON',desired:'ON',confirmed:'UNKNOWN',failureCount:3,nextRetryAt:999999,lastFailureReason:'AUTH'}));
+ const result=await s.engine.evaluateAndExecute(200000);
+ expect(result.message).toContain('AUTH');
+ expect(command).not.toHaveBeenCalled();
+});
+test('command failure stores sanitized diagnostic without exposing provider details', async () => {
+ const s=setup(on,baseline());
+ command.mockRejectedValueOnce(new Error('secret provider message'));
+ const result=await s.engine.evaluateAndExecute(200000);
+ expect(result.action).toBe('SKIPPED_TUYA_ERROR');
+ expect(result.message).not.toContain('secret provider message');
+ const persisted=s.store.save.mock.calls.at(-1)?.[0];
+ expect(persisted?.failureCount).toBe(1);
+ expect(persisted?.lastFailureReason).toBe('UNKNOWN');
+});
