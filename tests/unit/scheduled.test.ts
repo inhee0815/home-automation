@@ -23,6 +23,7 @@ test('enabled scheduled function evaluates once', async () => {
   expect(evalMock).toHaveBeenCalledTimes(1);
 });
 test('scheduled function returns sanitized error', async () => {
+  (runtimeEnabled as jest.Mock).mockResolvedValue(true);
   process.env.AUTOMATION_ENABLED = 'true';
   evalMock.mockRejectedValue(new Error('secret-data'));
   expect((await rawHandler()).statusCode).toBe(500);
