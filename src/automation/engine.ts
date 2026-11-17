@@ -7,7 +7,7 @@ import { notifyIncident } from './notification';
 import { runtimeEnabled } from './runtimeSwitch';
 import { classifyTuyaFailure } from '../tuya/failure';
 
-export const SHUTDOWN_DELAY_MS = Math.max(0, Number(process.env.SHUTDOWN_DELAY_SECONDS ?? 90)) * 1000;
+export const SHUTDOWN_DELAY_MS = Math.max(0, Number(process.env.SHUTDOWN_DELAY_SECONDS ?? 30)) * 1000;
 const retryMs = () => Math.max(60, Number(process.env.CONTROL_RETRY_SECONDS ?? 300)) * 1000;
 const verificationMs = () => Math.max(3600, Number(process.env.TUYA_VERIFY_SECONDS ?? 86400)) * 1000;
 
