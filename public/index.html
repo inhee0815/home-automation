@@ -78,7 +78,7 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
  $('refresh').onclick=async()=>{
   const provided=$('token').value.trim();if(provided)key=provided;
   if(!key){set('feedback','관리자 토큰을 입력하세요.');return}
-  $('refresh').disabled=true;set('feedback','운영 상태를 조회하고 있습니다.');
+  $('refresh').disabled=true;$('switchOn').disabled=true;$('switchOff').disabled=true;set('feedback','운영 상태를 조회하고 있습니다.');
   try{
    const res=await fetch('/api/monitor-status',{headers:{'x-automation-token':key},cache:'no-store'});
    const data=await res.json();if(!res.ok)throw new Error(data.error||('HTTP '+res.status));
