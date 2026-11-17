@@ -93,6 +93,8 @@ export const handler: Handler = async (event) => {
     body: JSON.stringify({
       serverTime: new Date().toISOString(),
       automationEnabled: active, canArmFromDashboard: canArm, armingBlockers: armingBlockers(event.headers.host),
+      controlMode: process.env.AUTOMATION_CONTROL_MODE === 'deploy' ? 'DEPLOY' : 'DISABLED',
+      storageEvidence: { latestRunFound: run !== null, latestRunAt: run?.time ?? null, latestRunAgeSeconds: run?.time ? Math.max(0,Math.round((Date.now()-Date.parse(run.time))/1000)) : null, latestReadOk: !warnings.includes('LATEST_RUN_UNAVAILABLE') && !warnings.includes('BLOBS_STORE_UNAVAILABLE') },
       commandsEnabled: process.env.TUYA_COMMANDS_ENABLED === 'true',
       status, partialData: warnings.length > 0, warnings,
       latestRun: run,

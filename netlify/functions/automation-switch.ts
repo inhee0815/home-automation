@@ -23,6 +23,8 @@ export const handler: Handler = async event => {
   if (!data || typeof data!=='object' || typeof (data as {enabled?: unknown}).enabled!=='boolean')
     return {statusCode:400,headers,body:JSON.stringify({error:'Expected {"enabled":boolean}'})};
   const enabled=(data as {enabled:boolean}).enabled;
+  if (process.env.AUTOMATION_CONTROL_MODE === 'deploy')
+    return {statusCode:409,headers,body:JSON.stringify({error:'Deploy-only control: configure environment and publish a new deploy. Dashboard buttons cannot start or stop automation.'})};
   const host = event.headers.host;
   if (enabled && !mayArmFromDashboard(host))
     return {statusCode:409,headers,body:JSON.stringify({error:'Cannot enable: production safety prerequisites are not configured',blockers:armingBlockers(host)})};

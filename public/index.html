@@ -104,7 +104,7 @@ table{border-collapse:collapse;width:100%}td,th{padding:12px 10px;text-align:lef
    set('verified',date(data.hood?.lastVerifiedAt));set('fails',data.hood?.failureCount??'—');
    rows('incidents',data.incidents,[x=>x.code,x=>date(x.lastSeenAt),x=>x.count]);
    rows('history',data.history,[x=>date(x.time),x=>x.outcome,x=>x.action,x=>x.induction,x=>x.hood]);
-   set('feedback',data.partialData?'일부 모니터링 데이터 조회 실패: '+(data.warnings||[]).join(', '):'조회 완료 · 서버 기준 '+date(data.serverTime));
+   set('feedback',data.partialData?'일부 모니터링 데이터 조회 실패: '+(data.warnings||[]).join(', '):'조회 완료 · 서버 기준 '+date(data.serverTime)+(data.storageEvidence?.latestRunFound?' · Blobs 실행 기록 확인 '+date(data.storageEvidence.latestRunAt):' · Blobs 실행 기록 없음'));
   }catch(e){set('overall','조회 실패');set('feedback',e.message);set('switchFeedback','운영 상태 조회 실패 · ON 버튼 비활성화')}
   finally{$('refresh').disabled=false;$('token').value=''}
  };

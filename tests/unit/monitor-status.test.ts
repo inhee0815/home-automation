@@ -39,6 +39,7 @@ test('empty store returns paused dashboard', async () => {
   expect(data.status).toBe('PAUSED');
   expect(data.partialData).toBe(false);
   expect(data.tuya.attempts).toBe(0);
+  expect(data.storageEvidence.latestRunFound).toBe(false);
 });
 test('one failing Blob read produces a partial response instead of 503', async () => {
   store.get.mockImplementation(async (key: string) => {
@@ -68,4 +69,13 @@ test('an active automation with a failed monitor read is degraded', async () => 
   store.list.mockRejectedValue(new Error('Cannot list'));
   const response = await request('test-admin');
   expect(JSON.parse(response.body).status).toBe('DEGRADED');
+});
+
+test('latest persisted run is surfaced with read evidence',async()=>{
+ store.get.mockImplementation(async (key:string)=>key==='monitor/latest'?{time:'2026-11-17T00:00:00.000Z',outcome:'PAUSED',action:'PAUSED',induction:'UNKNOWN',hood:'UNKNOWN'}:null);
+ const response=await request('test-admin');
+ expect(response.statusCode).toBe(200);
+ const data=JSON.parse(response.body);
+ expect(data.storageEvidence.latestRunFound).toBe(true);
+ expect(data.storageEvidence.latestReadOk).toBe(true);
 });
